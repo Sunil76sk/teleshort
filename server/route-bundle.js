@@ -1,4 +1,5 @@
 /** TeleShort v2.2 — Vercel static route bundle manifest */
+require('./health');
 require('./auth/telegram');
 require('./user/me');
 require('./settings/public');
