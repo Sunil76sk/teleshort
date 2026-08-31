@@ -6,7 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { verifyTelegramWebAppData, generateSessionChallengeToken, verifySessionChallengeToken } = require('../api/utils/auth');
+const { verifyTelegramWebAppData, generateSessionChallengeToken, verifySessionChallengeToken } = require('../server/utils/auth');
 
 const TEST_BOT_TOKEN = '123456789:ABCdefGHIjklMNOpqrsTUVwxyz12345678';
 process.env.BOT_TOKEN = TEST_BOT_TOKEN;

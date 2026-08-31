@@ -4,7 +4,7 @@
  * Telegram error handling (403, 429), and immutable audit logs.
  */
 
-const { generateAdminToken, authenticateAdmin } = require('../api/utils/auth');
+const { generateAdminToken, authenticateAdmin } = require('../server/utils/auth');
 
 const TEST_JWT_SECRET = 'phase8-admin-jwt-test-secret-key-32-chars';
 process.env.JWT_SECRET = TEST_JWT_SECRET;

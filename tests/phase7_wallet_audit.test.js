@@ -4,7 +4,7 @@
  * IDOR isolation, RBAC gating, concurrency races, and transactional rollbacks.
  */
 
-const { authenticateAdmin, verifyTelegramWebAppData, generateAdminToken } = require('../api/utils/auth');
+const { authenticateAdmin, verifyTelegramWebAppData, generateAdminToken } = require('../server/utils/auth');
 
 const TEST_BOT_TOKEN = '123456789:ABCdefGHIjklMNOpqrsTUVwxyz12345678';
 const TEST_JWT_SECRET = 'phase7-admin-jwt-test-secret-key-32-chars';

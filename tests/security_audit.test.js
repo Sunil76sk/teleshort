@@ -15,16 +15,16 @@ const {
   verifyPassword,
   signAdminToken,
   verifyAdminToken
-} = require('../api/utils/auth');
+} = require('../server/utils/auth');
 
 const {
   createAdChallengeToken,
   verifyAdChallengeToken,
   generateShortSlug,
   hashIp
-} = require('../api/utils/crypto');
+} = require('../server/utils/crypto');
 
-const { checkRateLimit } = require('../api/utils/ratelimit');
+const { checkRateLimit } = require('../server/utils/ratelimit');
 
 // Test Configuration
 const TEST_BOT_TOKEN = '123456789:ABCdefGHIjklMNOpqrsTUVwxyz12345678';

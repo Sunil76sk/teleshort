@@ -4,16 +4,16 @@
  */
 
 const crypto = require('crypto');
-const { validateUrl } = require('../api/utils/urlValidator');
-const { evaluateVisitorFraud } = require('../api/utils/fraud');
+const { validateUrl } = require('../server/utils/urlValidator');
+const { evaluateVisitorFraud } = require('../server/utils/fraud');
 const {
   createAdChallengeToken,
   verifyAdChallengeToken,
   generateShortSlug,
   hashIp
-} = require('../api/utils/crypto');
-const { checkRateLimit } = require('../api/utils/ratelimit');
-const { verifyTelegramWebAppData } = require('../api/utils/auth');
+} = require('../server/utils/crypto');
+const { checkRateLimit } = require('../server/utils/ratelimit');
+const { verifyTelegramWebAppData } = require('../server/utils/auth');
 
 const TEST_BOT_TOKEN = '123456789:ABCdefGHIjklMNOpqrsTUVwxyz12345678';
 const TEST_CHALLENGE_SECRET = 'phase3-phase4-secret-key-32-chars-long';

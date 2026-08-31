@@ -9,9 +9,9 @@ const {
   createAdChallengeToken,
   verifyAdChallengeToken,
   hashIp
-} = require('../api/utils/crypto');
-const { checkRateLimit } = require('../api/utils/ratelimit');
-const { verifyTelegramWebAppData } = require('../api/utils/auth');
+} = require('../server/utils/crypto');
+const { checkRateLimit } = require('../server/utils/ratelimit');
+const { verifyTelegramWebAppData } = require('../server/utils/auth');
 
 const TEST_BOT_TOKEN = '123456789:ABCdefGHIjklMNOpqrsTUVwxyz12345678';
 const TEST_CHALLENGE_SECRET = 'phase5-monetag-test-secret-32-chars';
