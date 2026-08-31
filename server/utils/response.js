@@ -49,3 +49,16 @@ module.exports = {
   sendSuccess,
   sendError
 };
+
+// api/index.js uses dynamic require() for route selection. Keep a static
+// reference in the dependency graph so Vercel bundles the route files and
+// their transitive npm dependencies (including jsonwebtoken).
+if (process.env.VERCEL === '1') {
+  try {
+    require('../route-bundle');
+  } catch (error) {
+    // Do not break unrelated requests at module initialization. The gateway
+    // will surface the actual route/module error if that route is requested.
+    console.warn('[Vercel Route Bundle Warning]:', error.message);
+  }
+}
