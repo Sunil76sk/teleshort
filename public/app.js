@@ -12,7 +12,7 @@ let authUser = null;
 let currentShortCode = null;
 let currentSession = null;
 let currentStep = 1;
-const BOT_USERNAME = 'TeleShortOfficial_bot';
+const BOT_USERNAME = 'myfileshareskbot';
 
 // Telegram WebApp Setup
 if (tg) {

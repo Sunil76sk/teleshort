@@ -9,7 +9,28 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- =========================================================================
--- 1. TABLES DEFINITIONS
+-- 1. CLEAN LEGACY SCHEMA (Prevents column mismatch errors from older scripts)
+-- =========================================================================
+DROP TABLE IF EXISTS public.broadcast_deliveries CASCADE;
+DROP TABLE IF EXISTS public.broadcasts CASCADE;
+DROP TABLE IF EXISTS public.fraud_events CASCADE;
+DROP TABLE IF EXISTS public.audit_logs CASCADE;
+DROP TABLE IF EXISTS public.admin_sessions CASCADE;
+DROP TABLE IF EXISTS public.admin_users CASCADE;
+DROP TABLE IF EXISTS public.settings CASCADE;
+DROP TABLE IF EXISTS public.force_join_channels CASCADE;
+DROP TABLE IF EXISTS public.referrals CASCADE;
+DROP TABLE IF EXISTS public.withdrawals CASCADE;
+DROP TABLE IF EXISTS public.wallet_transactions CASCADE;
+DROP TABLE IF EXISTS public.ad_events CASCADE;
+DROP TABLE IF EXISTS public.ad_sessions CASCADE;
+DROP TABLE IF EXISTS public.clicks CASCADE;
+DROP TABLE IF EXISTS public.links CASCADE;
+DROP TABLE IF EXISTS public.daily_stats CASCADE;
+DROP TABLE IF EXISTS public.users CASCADE;
+
+-- =========================================================================
+-- 2. TABLES DEFINITIONS (16 PRODUCTION TABLES)
 -- =========================================================================
 
 -- 1.1 USERS TABLE
