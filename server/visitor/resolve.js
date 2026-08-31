@@ -30,6 +30,9 @@ module.exports = async function handler(req, res) {
   }
 
   const botToken = process.env.BOT_TOKEN;
+  // Telegram initData can arrive in the canonical header, request body,
+  // or query string depending on the client/request path.
+  const initData = req.headers['x-telegram-init-data'] || req.body?.initData || req.query?.initData;
   const auth = verifyTelegramWebAppData(initData, botToken);
   if (!auth.valid || !auth.user) {
     return sendError(res, auth.error || 'Invalid Telegram authentication signature', 401, 'INVALID_AUTH');
