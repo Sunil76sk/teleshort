@@ -23,9 +23,12 @@ function handleCors(req, res) {
 
 function sendSuccess(res, data = {}, statusCode = 200) {
   setCorsHeaders(res);
+  // Keep the canonical nested `data` envelope while also exposing its
+  // fields at the top level for the existing production frontend client.
   return res.status(statusCode).json({
     success: true,
-    data
+    data,
+    ...(data && typeof data === 'object' && !Array.isArray(data) ? data : {})
   });
 }
 
