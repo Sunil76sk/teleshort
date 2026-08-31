@@ -19,9 +19,14 @@ module.exports = async function handler(req, res) {
     return sendError(res, 'Method Not Allowed', 405);
   }
 
-  const { short_code, initData } = req.body || {};
-  if (!short_code) {
+  const rawCode = req.body?.short_code || req.body?.short_id || req.query?.short_code || req.query?.code;
+  if (!rawCode) {
     return sendError(res, 'Short code is required', 400, 'MISSING_SHORT_CODE');
+  }
+
+  const cleanCode = String(rawCode).replace(/^link_/, '').trim();
+  if (!cleanCode || !cleanCode.match(/^[a-zA-Z0-9_-]{3,32}$/)) {
+    return sendError(res, 'Invalid short code format', 400, 'INVALID_SHORT_CODE');
   }
 
   const botToken = process.env.BOT_TOKEN;
@@ -44,14 +49,23 @@ module.exports = async function handler(req, res) {
   try {
     const supabase = getSupabaseClient();
 
-    // 1. Lookup Link in Database
-    const { data: link, error: linkErr } = await supabase
+    // 1. Lookup Link in Database (query short_code first, fallback to short_id)
+    let { data: link, error: linkErr } = await supabase
       .from('links')
       .select('id, short_code, owner_id, status, click_count, eligible_click_count, total_earnings')
-      .eq('short_code', short_code.trim())
+      .eq('short_code', cleanCode)
       .single();
 
     if (linkErr || !link) {
+      const { data: fallbackLink } = await supabase
+        .from('links')
+        .select('id, short_code, owner_id, status, click_count, eligible_click_count, total_earnings')
+        .eq('short_id', cleanCode)
+        .single();
+      link = fallbackLink;
+    }
+
+    if (!link) {
       return sendError(res, 'Link not found or has been removed', 404, 'LINK_NOT_FOUND');
     }
 

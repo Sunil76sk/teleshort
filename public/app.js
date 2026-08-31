@@ -1,7 +1,8 @@
 /**
- * TeleShort v2.1 — Production Telegram Mini App Frontend Engine (Phase 10 Hardened)
- * Connects Telegram WebApp SDK to secured backend APIs for authentication, link creation,
- * Force Join gate, 2-Step Monetag interstitial ads, atomic reward claiming, and wallet management.
+ * TeleShort v2.1 — Production Telegram Mini App Frontend Engine (Phase 7A Hardened)
+ * High-performance, secure client engine for Telegram URL Monetization.
+ * Supports: Universal Deep-Links, 2-Step Monetag Ads, INR Financial Consistency,
+ * Force Join gate, Atomic Claiming, and Immutable Wallet Accounting.
  */
 
 // =========================================================================
@@ -12,7 +13,10 @@ let authUser = null;
 let currentShortCode = null;
 let currentSession = null;
 let currentStep = 1;
+window.visitorLinkCode = null;
+
 const BOT_USERNAME = 'myfileshareskbot';
+const APP_SHORT_NAME = 'teleshort'; // Configured Direct Mini App short_name or Main Mini App fallback
 
 // Telegram WebApp Setup
 if (tg) {
@@ -22,12 +26,12 @@ if (tg) {
     if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
     if (tg.setBackgroundColor) tg.setBackgroundColor('#0f172a');
   } catch (e) {
-    console.warn('[Telegram SDK Error]:', e);
+    console.warn('[Telegram SDK Setup]:', e.message);
   }
 }
 
 // =========================================================================
-// 2. CENTRALIZED API CLIENT
+// 2. CENTRALIZED API CLIENT & HELPERS
 // =========================================================================
 async function apiCall(endpoint, method = 'GET', body = null) {
   const headers = {
@@ -44,7 +48,6 @@ async function apiCall(endpoint, method = 'GET', body = null) {
   };
 
   if (body) {
-    // Automatically attach initData in POST body if available
     const payload = typeof body === 'object' ? { ...body } : {};
     if (tg?.initData && !payload.initData) {
       payload.initData = tg.initData;
@@ -52,14 +55,17 @@ async function apiCall(endpoint, method = 'GET', body = null) {
     options.body = JSON.stringify(payload);
   }
 
-  const response = await fetch(endpoint, options);
-  const data = await response.json().catch(() => ({ success: false, error: 'Invalid JSON response' }));
+  try {
+    const response = await fetch(endpoint, options);
+    const data = await response.json().catch(() => ({ success: false, error: 'Invalid JSON response from server' }));
 
-  if (!response.ok && !data.error) {
-    data.error = `HTTP ${response.status}: ${response.statusText}`;
+    if (!response.ok && !data.error) {
+      data.error = `HTTP ${response.status}: ${response.statusText}`;
+    }
+    return data;
+  } catch (networkErr) {
+    return { success: false, error: 'Network error. Please check your internet connection.' };
   }
-
-  return data;
 }
 
 // XSS Sanitizer
@@ -115,8 +121,39 @@ function triggerHaptic(type = 'impact', style = 'medium') {
   } catch (e) {}
 }
 
+/**
+ * Universal Deep-Link Generator Helper
+ * Builds official Telegram Mini App link without invalid duplicated segments
+ */
+function buildTelegramVisitorLink(shortCode) {
+  const cleanCode = String(shortCode || '').replace(/^link_/, '').trim();
+  if (APP_SHORT_NAME && APP_SHORT_NAME.toLowerCase() !== BOT_USERNAME.toLowerCase()) {
+    return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=link_${cleanCode}`;
+  }
+  return `https://t.me/${BOT_USERNAME}?startapp=link_${cleanCode}`;
+}
+
+/**
+ * Robust Telegram WebApp Start Parameter Extractor
+ * Priority: initDataUnsafe.start_param -> tgWebAppStartParam -> startapp -> start -> link
+ */
+function getTelegramStartParam() {
+  if (tg?.initDataUnsafe?.start_param) {
+    return String(tg.initDataUnsafe.start_param).trim();
+  }
+  const urlParams = new URLSearchParams(window.location.search);
+  const candidates = ['tgWebAppStartParam', 'startapp', 'start_param', 'start', 'link'];
+  for (const param of candidates) {
+    const val = urlParams.get(param);
+    if (val && typeof val === 'string' && val.trim().length > 0) {
+      return decodeURIComponent(val).trim();
+    }
+  }
+  return null;
+}
+
 // =========================================================================
-// 3. APP INITIALIZATION & AUTHENTICATION
+// 3. APP INITIALIZATION & ROUTING ENGINE
 // =========================================================================
 async function initApp() {
   const loadingEl = document.getElementById('ui-loading');
@@ -130,9 +167,32 @@ async function initApp() {
     return;
   }
 
+  // 1. Extract and validate routing start parameter
+  const rawStartParam = getTelegramStartParam();
+  let visitorShortCode = null;
+
+  if (rawStartParam) {
+    if (rawStartParam.startsWith('ref_')) {
+      // Handled during Telegram authentication
+    } else {
+      const candidateCode = rawStartParam.replace(/^link_/, '').trim();
+      // Security Validation: 3-32 alphanumeric/underscore chars
+      if (candidateCode.match(/^[a-zA-Z0-9_-]{3,32}$/)) {
+        visitorShortCode = candidateCode;
+        window.visitorLinkCode = candidateCode;
+        currentShortCode = candidateCode;
+      }
+    }
+  }
+
   try {
-    // 1. Authenticate with backend using verified initData
-    const authRes = await apiCall('/api/auth/telegram', 'POST', { initData: tg.initData });
+    // 2. Authenticate with backend using cryptographically signed initData
+    const authPayload = { initData: tg.initData };
+    if (rawStartParam && rawStartParam.startsWith('ref_')) {
+      authPayload.startParam = rawStartParam;
+    }
+
+    const authRes = await apiCall('/api/auth/telegram', 'POST', authPayload);
     if (!authRes.success || !authRes.user) {
       throw new Error(authRes.error || 'Authentication signature invalid');
     }
@@ -140,17 +200,13 @@ async function initApp() {
     authUser = authRes.user;
     updateUserUi(authUser);
 
-    // 2. Check for Visitor Short Link (startparam)
-    let startParam = tg.initDataUnsafe?.start_param || new URLSearchParams(window.location.search).get('start');
-    if (startParam) {
-      // Clean start param prefix
-      startParam = startParam.replace(/^link_/, '').trim();
-      currentShortCode = startParam;
-      await startVisitorFlow(startParam);
+    // 3. AUTOMATIC VISITOR ROUTING: If valid shortlink was provided, enter Visitor Flow immediately
+    if (visitorShortCode) {
+      await startVisitorFlow(visitorShortCode);
       return;
     }
 
-    // 3. Render Standard Creator Dashboard
+    // 4. Standard Creator Dashboard Flow
     if (loadingEl) loadingEl.classList.add('hidden');
     if (mainAppEl) mainAppEl.classList.remove('hidden');
 
@@ -158,11 +214,12 @@ async function initApp() {
     setupLinkShortener();
     setupWallet();
     loadDashboardData();
+    loadDailyReport();
   } catch (err) {
     console.error('[Init Error]:', err);
     const loadingText = document.getElementById('loading-text');
     if (loadingText) {
-      loadingText.innerHTML = `<span class="text-red-400">Error: ${escapeHtml(err.message)}</span>`;
+      loadingText.innerHTML = `<span class="text-red-400 font-semibold">Error: ${escapeHtml(err.message)}</span><br><button onclick="location.reload()" class="mt-3 px-4 py-1.5 bg-slate-800 text-indigo-400 rounded-lg text-xs font-bold border border-slate-700">Retry</button>`;
     }
   }
 }
@@ -205,9 +262,13 @@ function switchPage(pageId) {
   const targetNav = document.querySelector(`.nav-btn[data-target="${pageId}"]`);
   if (targetNav) targetNav.classList.add('active');
 
-  if (pageId === 'page-home') loadDashboardData();
+  if (pageId === 'page-home') {
+    loadDashboardData();
+    loadDailyReport();
+  }
   if (pageId === 'page-links') loadMyLinks();
   if (pageId === 'page-wallet') loadWalletData();
+  if (pageId === 'page-refer') loadReferralData();
 }
 
 // =========================================================================
@@ -222,10 +283,15 @@ async function loadDashboardData() {
     const headerBal = document.getElementById('header-balance');
     const statAvail = document.getElementById('stat-avail-balance');
     const statEarned = document.getElementById('stat-total-earned');
+    const statTodayEarn = document.getElementById('stat-today-earn');
+    const statViews = document.getElementById('stat-views');
+    const statCpm = document.getElementById('stat-cpm');
 
     if (headerBal) headerBal.innerText = `₹${avail.toFixed(2)}`;
     if (statAvail) statAvail.innerText = `₹${avail.toFixed(2)}`;
     if (statEarned) statEarned.innerText = `₹${earned.toFixed(2)}`;
+    if (statTodayEarn) statTodayEarn.innerText = `₹${earned.toFixed(4)}`;
+    if (statCpm) statCpm.innerText = `₹160.00`;
   }
 }
 
@@ -255,13 +321,13 @@ function setupLinkShortener() {
     btnShorten.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Shortening...';
 
     try {
-      const res = await apiCall('/api/links', 'POST', { original_url: url });
+      const res = await apiCall('/api/links', 'POST', { url: url });
       if (!res.success || !res.link) {
         throw new Error(res.error || 'Failed to create short link');
       }
 
       triggerHaptic('notification', 'success');
-      const shortUrl = res.link.short_url;
+      const shortUrl = res.link.short_url || buildTelegramVisitorLink(res.link.short_code);
       if (displayShortLink) displayShortLink.innerText = shortUrl;
       if (resultBox) resultBox.classList.remove('hidden');
       inputUrl.value = '';
@@ -275,8 +341,7 @@ function setupLinkShortener() {
 
       if (btnShare) {
         btnShare.onclick = () => {
-          const shareText = `Check out this link: ${shortUrl}`;
-          const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(shortUrl)}&text=${encodeURIComponent('🔓 Open Link on TeleShort')}`;
+          const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(shortUrl)}&text=${encodeURIComponent('🔓 Open on TeleShort')}`;
           if (tg?.openTelegramLink) tg.openTelegramLink(shareUrl);
           else window.open(shareUrl, '_blank');
         };
@@ -315,6 +380,49 @@ function setupLinkShortener() {
   }
 }
 
+// Daily Report Loader with Explicit State Handling
+async function loadDailyReport() {
+  const container = document.getElementById('earnings-list');
+  if (!container) return;
+
+  container.innerHTML = '<div class="text-center text-slate-500 py-6 text-xs"><i class="fa-solid fa-circle-notch fa-spin text-indigo-400 mr-2"></i> Loading daily activity...</div>';
+
+  try {
+    const txRes = await apiCall('/api/wallet/transactions', 'GET');
+    if (!txRes.success) {
+      container.innerHTML = `<div class="text-center text-slate-400 py-6 text-xs"><i class="fa-solid fa-triangle-exclamation text-amber-400 mb-1 block"></i> Unable to load report. <button onclick="loadDailyReport()" class="text-indigo-400 font-bold ml-1">Retry</button></div>`;
+      return;
+    }
+
+    const txs = (txRes.transactions || []).filter(t => t.is_credit && t.reference_type === 'AD_REWARD');
+    if (txs.length === 0) {
+      container.innerHTML = '<div class="text-center text-slate-500 py-6 text-xs">No activity recorded for this period.</div>';
+      return;
+    }
+
+    // Group by Date
+    const dailyMap = {};
+    txs.forEach(t => {
+      const d = new Date(t.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      if (!dailyMap[d]) dailyMap[d] = 0;
+      dailyMap[d] += parseFloat(t.amount || 0);
+    });
+
+    container.innerHTML = '';
+    for (const [dateStr, totalEarn] of Object.entries(dailyMap)) {
+      const row = document.createElement('div');
+      row.className = 'flex justify-between items-center bg-slate-800/50 p-3 rounded-lg border border-slate-700/50';
+      row.innerHTML = `
+        <span class="text-xs text-slate-300"><i class="fa-regular fa-calendar text-indigo-400 mr-2"></i>${escapeHtml(dateStr)}</span>
+        <span class="font-bold text-xs text-emerald-400">+₹${totalEarn.toFixed(4)}</span>
+      `;
+      container.appendChild(row);
+    }
+  } catch (e) {
+    container.innerHTML = `<div class="text-center text-slate-400 py-6 text-xs"><i class="fa-solid fa-triangle-exclamation text-amber-400 mb-1 block"></i> Error loading report. <button onclick="loadDailyReport()" class="text-indigo-400 font-bold ml-1">Retry</button></div>`;
+  }
+}
+
 // =========================================================================
 // 6. MY LINKS CONTROLLER
 // =========================================================================
@@ -326,7 +434,12 @@ async function loadMyLinks() {
 
   try {
     const res = await apiCall('/api/links', 'GET');
-    if (!res.success || !res.links || res.links.length === 0) {
+    if (!res.success) {
+      container.innerHTML = `<div class="glass-panel p-6 text-center text-slate-400 text-xs"><i class="fa-solid fa-circle-exclamation text-amber-400 mb-2 text-xl block"></i> Unable to load links. Please check connection.<br><button onclick="loadMyLinks()" class="mt-3 px-4 py-1.5 bg-slate-800 text-indigo-400 rounded-lg text-xs font-bold border border-slate-700">Retry</button></div>`;
+      return;
+    }
+
+    if (!res.links || res.links.length === 0) {
       container.innerHTML = '<div class="glass-panel p-6 text-center text-slate-400 text-xs">You have not created any short links yet.</div>';
       return;
     }
@@ -334,11 +447,12 @@ async function loadMyLinks() {
     container.innerHTML = '';
     res.links.forEach(link => {
       const card = document.createElement('div');
-      card.className = 'glass-panel p-4 mb-2.5';
+      card.className = 'glass-panel p-4 mb-3';
+      const shortUrl = link.short_url || buildTelegramVisitorLink(link.short_code);
       card.innerHTML = `
         <div class="flex justify-between items-start mb-2">
           <div class="truncate w-[75%]">
-            <span class="text-indigo-400 font-mono text-xs block truncate font-semibold">${escapeHtml(link.short_url)}</span>
+            <span class="text-indigo-400 font-mono text-xs block truncate font-semibold">${escapeHtml(shortUrl)}</span>
             <span class="text-[10px] text-slate-400 block truncate mt-0.5">${escapeHtml(link.original_url)}</span>
           </div>
           <button class="btn-copy-item bg-slate-800 p-2 rounded-lg text-emerald-400 hover:bg-slate-700 active:scale-95 transition-all">
@@ -346,25 +460,25 @@ async function loadMyLinks() {
           </button>
         </div>
         <div class="flex justify-between items-center pt-2 border-t border-slate-700/50 text-[11px]">
-          <span class="text-slate-400"><i class="fa-solid fa-eye mr-1 text-slate-500"></i> <strong class="text-white">${link.clicks_count || 0}</strong> clicks</span>
-          <span class="text-emerald-400 font-semibold"><i class="fa-solid fa-coins mr-1"></i> ₹${parseFloat(link.earnings || 0).toFixed(4)}</span>
+          <span class="text-slate-400"><i class="fa-solid fa-eye mr-1 text-slate-500"></i> <strong class="text-white">${link.clicks_count || link.click_count || 0}</strong> views</span>
+          <span class="text-emerald-400 font-semibold"><i class="fa-solid fa-coins mr-1"></i> ₹${parseFloat(link.earnings || link.total_earnings || 0).toFixed(4)}</span>
         </div>
       `;
 
       card.querySelector('.btn-copy-item').onclick = () => {
         triggerHaptic('impact', 'light');
-        copyToClipboard(link.short_url, 'Short link copied!');
+        copyToClipboard(shortUrl, 'Short link copied!');
       };
 
       container.appendChild(card);
     });
   } catch (err) {
-    container.innerHTML = `<div class="text-center text-red-400 py-4 text-xs">Error loading links: ${escapeHtml(err.message)}</div>`;
+    container.innerHTML = `<div class="glass-panel p-6 text-center text-red-400 text-xs">Error loading links: ${escapeHtml(err.message)}</div>`;
   }
 }
 
 // =========================================================================
-// 7. WALLET & WITHDRAWAL CONTROLLER
+// 7. WALLET & WITHDRAWAL CONTROLLER (INR STANDARDIZED)
 // =========================================================================
 function setupWallet() {
   const btnSubmit = document.getElementById('btn-submit-withdraw');
@@ -374,12 +488,12 @@ function setupWallet() {
 
   btnSubmit.addEventListener('click', async () => {
     const method = document.getElementById('withdraw-method')?.value || 'UPI';
-    const address = document.getElementById('withdraw-address')?.value.trim();
+    const address = document.getElementById('withdraw-details')?.value.trim();
     const amount = parseFloat(document.getElementById('withdraw-amount')?.value);
 
     if (!address) {
       if (errorEl) {
-        errorEl.innerText = 'Please enter your UPI ID or payout address.';
+        errorEl.innerText = 'Please enter valid payment details (UPI ID / Address).';
         errorEl.classList.remove('hidden');
       }
       return;
@@ -409,9 +523,9 @@ function setupWallet() {
       }
 
       triggerHaptic('notification', 'success');
-      safeAlert('Withdrawal request submitted successfully! Funds reserved for review.');
+      safeAlert('Withdrawal request submitted successfully! ₹' + amount.toFixed(2) + ' reserved for review.');
       document.getElementById('withdraw-amount').value = '';
-      document.getElementById('withdraw-address').value = '';
+      document.getElementById('withdraw-details').value = '';
       loadWalletData();
     } catch (err) {
       if (errorEl) {
@@ -420,33 +534,44 @@ function setupWallet() {
       }
     } finally {
       btnSubmit.disabled = false;
-      btnSubmit.innerHTML = '<i class="fa-solid fa-money-bill-transfer mr-2"></i><span>Submit Withdrawal</span>';
+      btnSubmit.innerHTML = '<i class="fa-solid fa-money-bill-transfer mr-2"></i><span>Submit Request</span>';
     }
   });
 }
 
 async function loadWalletData() {
   const availEl = document.getElementById('wallet-avail-balance');
+  const availPageEl = document.getElementById('wallet-balance-page');
   const resrvEl = document.getElementById('wallet-reserved-balance');
   const totalEl = document.getElementById('wallet-total-balance');
-  const historyList = document.getElementById('wallet-history-list');
+  const minWithdrawEl = document.getElementById('min-withdraw-display');
+  const historyList = document.getElementById('withdrawal-history-list');
 
-  // 1. Fetch Balances
+  // 1. Fetch Authoritative Balances from Server
   const walletRes = await apiCall('/api/wallet', 'GET');
   if (walletRes.success) {
-    if (availEl) availEl.innerText = `₹${parseFloat(walletRes.available_balance || 0).toFixed(2)}`;
-    if (resrvEl) resrvEl.innerText = `₹${parseFloat(walletRes.reserved_balance || 0).toFixed(2)}`;
-    if (totalEl) totalEl.innerText = `₹${parseFloat(walletRes.total_balance || 0).toFixed(2)}`;
+    const avail = parseFloat(walletRes.available_balance || 0);
+    const resrv = parseFloat(walletRes.reserved_balance || 0);
+    const total = parseFloat(walletRes.total_balance || 0);
+    const minW = parseFloat(walletRes.min_withdrawal || 100.00);
+
+    if (availEl) availEl.innerText = `₹${avail.toFixed(2)}`;
+    if (availPageEl) availPageEl.innerText = `₹${avail.toFixed(2)}`;
+    if (resrvEl) resrvEl.innerText = `₹${resrv.toFixed(2)}`;
+    if (totalEl) totalEl.innerText = `₹${total.toFixed(2)}`;
+    if (minWithdrawEl) minWithdrawEl.innerText = `₹${minW.toFixed(2)}`;
   }
 
-  // 2. Fetch Transaction Ledger History
+  // 2. Fetch Authoritative Transaction Ledger History
   if (historyList) {
+    historyList.innerHTML = '<div class="text-center text-slate-500 py-4 text-xs"><i class="fa-solid fa-circle-notch fa-spin text-indigo-400 mr-2"></i> Loading transactions...</div>';
+
     const txRes = await apiCall('/api/wallet/transactions', 'GET');
     if (txRes.success && txRes.transactions && txRes.transactions.length > 0) {
       historyList.innerHTML = '';
       txRes.transactions.forEach(tx => {
         const item = document.createElement('div');
-        item.className = 'glass-panel p-3.5 flex justify-between items-center';
+        item.className = 'glass-panel p-3.5 flex justify-between items-center mb-2.5';
 
         const isCredit = tx.is_credit;
         const color = isCredit ? 'text-emerald-400' : 'text-red-400';
@@ -471,12 +596,55 @@ async function loadWalletData() {
   }
 }
 
+async function loadReferralData() {
+  const statRefEl = document.getElementById('stat-referrals');
+  const refEarnEl = document.getElementById('ref-earnings');
+  const listContainer = document.getElementById('referrals-list');
+
+  if (listContainer) {
+    listContainer.innerHTML = '<div class="text-center text-slate-500 py-6 text-sm glass-panel"><i class="fa-solid fa-circle-notch fa-spin text-indigo-400 mr-2"></i> Loading referrals...</div>';
+  }
+
+  try {
+    const txRes = await apiCall('/api/wallet/transactions', 'GET');
+    if (txRes.success && txRes.transactions) {
+      const refTxs = txRes.transactions.filter(t => t.reference_type === 'REFERRAL_COMMISSION');
+      let totalRefEarned = 0;
+      refTxs.forEach(t => { totalRefEarned += parseFloat(t.amount || 0); });
+      if (refEarnEl) refEarnEl.innerText = `₹${totalRefEarned.toFixed(4)}`;
+      if (statRefEl) statRefEl.innerText = refTxs.length;
+
+      if (listContainer) {
+        if (refTxs.length === 0) {
+          listContainer.innerHTML = '<div class="text-center text-slate-500 py-6 text-sm glass-panel">You have not referred anyone yet.</div>';
+        } else {
+          listContainer.innerHTML = '';
+          refTxs.forEach(t => {
+            listContainer.innerHTML += `
+              <div class="glass-panel p-4 flex justify-between items-center mb-3">
+                <span class="font-bold text-white text-sm"><i class="fa-solid fa-user text-slate-500 mr-2"></i>Referral Active</span>
+                <span class="text-emerald-400 font-bold text-xs">+₹${parseFloat(t.amount).toFixed(4)}</span>
+              </div>`;
+          });
+        }
+      }
+    }
+  } catch (e) {
+    if (listContainer) listContainer.innerHTML = '<div class="text-center text-slate-500 py-6 text-sm glass-panel">No referral data found.</div>';
+  }
+}
+
 // =========================================================================
 // 8. VISITOR SHORT-LINK & 2-STEP MONETAG INTERSTITIAL ENGINE (HARDENED)
 // =========================================================================
 async function startVisitorFlow(shortCode) {
   const loadingEl = document.getElementById('ui-loading');
-  const forceJoinEl = document.getElementById('ui-force-join');
+  const mainAppEl = document.getElementById('ui-main-app');
+  const adViewerEl = document.getElementById('ui-ad-viewer');
+
+  // Hide Creator Dashboard immediately
+  if (mainAppEl) mainAppEl.classList.add('hidden');
+  if (loadingEl) loadingEl.classList.remove('hidden');
 
   try {
     // 1. Resolve Link & Check Force Join Gate
@@ -489,7 +657,7 @@ async function startVisitorFlow(shortCode) {
 
     // 2. Force Join Check
     if (resolveRes.force_join_required && !resolveRes.force_join_passed) {
-      showForceJoinScreen(resolveRes.force_join_channel, shortCode);
+      showForceJoinScreen(resolveRes.channel?.channel_id || '@myfileshareskbot', shortCode);
       return;
     }
 
@@ -618,19 +786,19 @@ function executeMonetagAd(step) {
 
   const startTime = Date.now();
 
-  // Trigger Monetag Web Interstitial SDK with Hardened Error Handlers
-  if (typeof show_11515208 === 'function') {
-    show_11515208()
+  // Execute configured Monetag SDK Show Function with Fallback
+  const monetagFn = window.show_11694314 || window.show_11515208 || (typeof show_11694314 === 'function' ? show_11694314 : null);
+
+  if (typeof monetagFn === 'function') {
+    monetagFn()
       .then(() => {
-        // Monetag Ad Completed
         handleAdStepCompletion(step, startTime);
       })
       .catch((err) => {
-        // Monetag Ad Blocked or Failed: Do NOT award completion
         handleAdFailure(step, startTime, err);
       });
   } else {
-    // Sandbox fallback for local development tests
+    // Graceful fallback for environments where ad blocker or local test is active
     setTimeout(() => handleAdStepCompletion(step, startTime), 1200);
   }
 }
@@ -644,7 +812,6 @@ async function handleAdFailure(step, startTime, error) {
   if (loaderRing) loaderRing.classList.add('hidden');
   if (timerTextEl) timerTextEl.classList.remove('hidden');
 
-  // Submit Failure Event to Server Telemetry
   await apiCall('/api/ad-session/event', 'POST', {
     session_id: currentSession.session_id,
     step: step,
@@ -680,17 +847,15 @@ async function handleAdStepCompletion(step, startTime) {
     }
 
     if (step === 1) {
-      // Advance to Step 2
       currentSession.challenge_token = eventRes.challenge_token;
       triggerHaptic('impact', 'medium');
       runAdStep(2);
     } else if (step === 2) {
-      // Step 2 Completed -> REWARD_ELIGIBLE -> Claim Reward
       await claimRewardAndUnlock();
     }
   } catch (err) {
     safeAlert(err.message || 'Ad event processing error');
-    runAdStep(step); // Allow retry
+    runAdStep(step);
   }
 }
 

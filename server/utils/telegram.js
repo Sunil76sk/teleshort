@@ -91,12 +91,26 @@ async function checkChatMember(channelId, telegramUserId, forceRefresh = false) 
  * @returns {string} Fully qualified t.me startapp deep-link
  */
 function buildTelegramDeepLink(shortCode) {
-  const botUsername = process.env.BOT_USERNAME || 'TeleShortLink_bot';
-  const appShortName = process.env.APP_SHORT_NAME || 'TeleShortLink';
-  return `https://t.me/${botUsername}/${appShortName}?startapp=link_${shortCode}`;
+  const botUsername = (process.env.BOT_USERNAME || 'myfileshareskbot').replace(/^@/, '').trim();
+  const appShortName = process.env.APP_SHORT_NAME ? process.env.APP_SHORT_NAME.trim() : '';
+
+  // Clean slug
+  const cleanCode = String(shortCode || '').replace(/^link_/, '').trim();
+
+  // If a distinct Direct Mini App short_name is configured (e.g. 'teleshort' or 'app')
+  if (appShortName && appShortName.toLowerCase() !== botUsername.toLowerCase()) {
+    return `https://t.me/${botUsername}/${appShortName}?startapp=link_${cleanCode}`;
+  }
+  // Otherwise use the official Main Mini App deep link format
+  return `https://t.me/${botUsername}?startapp=link_${cleanCode}`;
+}
+
+function buildTelegramVisitorLink(shortCode) {
+  return buildTelegramDeepLink(shortCode);
 }
 
 module.exports = {
   checkChatMember,
-  buildTelegramDeepLink
+  buildTelegramDeepLink,
+  buildTelegramVisitorLink
 };

@@ -127,8 +127,9 @@ module.exports = async function handler(req, res) {
         link: {
           id: insertedLink.id,
           short_code: insertedLink.short_code,
-          original_url: insertedLink.original_url,
+          short_url: deepLink,
           deep_link: deepLink,
+          original_url: insertedLink.original_url,
           status: insertedLink.status,
           click_count: insertedLink.click_count,
           eligible_click_count: insertedLink.eligible_click_count,
@@ -161,17 +162,23 @@ module.exports = async function handler(req, res) {
 
       if (error) throw error;
 
-      const formattedLinks = (links || []).map(l => ({
-        id: l.id,
-        short_code: l.short_code,
-        original_url: l.original_url,
-        deep_link: buildTelegramDeepLink(l.short_code),
-        status: l.status,
-        click_count: l.click_count,
-        eligible_click_count: l.eligible_click_count,
-        total_earnings: l.total_earnings,
-        created_at: l.created_at
-      }));
+      const formattedLinks = (links || []).map(l => {
+        const linkUrl = buildTelegramDeepLink(l.short_code);
+        return {
+          id: l.id,
+          short_code: l.short_code,
+          short_url: linkUrl,
+          deep_link: linkUrl,
+          original_url: l.original_url,
+          status: l.status,
+          click_count: l.click_count,
+          clicks_count: l.click_count,
+          eligible_click_count: l.eligible_click_count,
+          total_earnings: l.total_earnings,
+          earnings: l.total_earnings,
+          created_at: l.created_at
+        };
+      });
 
       return sendSuccess(res, {
         links: formattedLinks,
