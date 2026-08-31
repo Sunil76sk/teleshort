@@ -1,0 +1,36 @@
+
+Yeh raha aapka Super-Optimized aur Bulletproof AI Prompt. Isko maine itna clear aur structured bana diya hai ki koi bhi AI (ChatGPT, Claude, Gemini) isko padhte hi exactly wahi karega jo aap chahte hain, bina ek line ka code kharab kiye.
+Aap isko apni YouTube video ke description ya comment me de sakte hain.
+Copy from here 👇
+Prompt to AI:
+Act as an Expert Full-Stack Developer. I have attached a ZIP file containing the base source code for my Telegram Mini App Earning System (index.html, admin.html, api/ folder, and database.sql).
+Your ONLY task is to configure these files by replacing the generic placeholders with my actual live credentials provided below. Do not refactor, optimize, or change the core logic, HTML structure, or CSS.
+🛠️ MY ACTUAL DETAILS:
+Supabase URL: [Paste your Supabase URL here]
+Supabase Anon Key: [Paste your Supabase Anon Key here]
+Vercel Live URL: [Paste your Vercel URL, e.g., https://my-app.vercel.app]
+Telegram Bot Username: [Paste your Bot Username, e.g., MyEarningBot]
+Admin Panel Password: [Type your desired Admin Password here]
+Monetag Script Tag: [Paste your full Monetag <script> tag here]
+Monetag Show Function: [Paste your Monetag function name, e.g., show_11515208]
+⚠️ STRICT INSTRUCTIONS FOR REPLACING:
+1. Inside index.html:
+Find and replace the existing SUPABASE_URL and SUPABASE_ANON_KEY variables with my details.
+Find and replace VERCEL_API_URL with my Vercel Live URL.
+Find and replace BOT_USERNAME with my Telegram Bot Username.
+Replace the existing Monetag <script src='//libtl.com...> tag in the <head> with My Monetag Script Tag.
+Inside the executeAdClick() function, replace the default show_XXXXXXX() call with My Monetag Show Function.
+2. Inside admin.html:
+Find and replace the SUPABASE_URL and SUPABASE_ANON_KEY.
+Find and replace VERCEL_BROADCAST_API with my Vercel Live URL.
+Replace const ADMIN_PASSWORD = "admin"; with My Admin Panel Password.
+3. Crucial Rules:
+Keep all gradients, Tailwind classes, and CSS intact.
+Return the COMPLETE code for the updated files, do not use placeholders like // ...rest of the code.
+🎯 REQUIRED OUTPUT FROM YOU:
+The Full Updated index.html code (inside a single code block).
+The Full Updated admin.html code (inside a single code block).
+A Short Step-by-Step Guide telling me exactly how to:
+Upload these files to GitHub.
+Deploy to Vercel and add BOT_TOKEN & SUPABASE_KEY in Environment Variables.
+Run the database.sql code in Supabase SQL Editor.

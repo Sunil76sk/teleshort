@@ -1,0 +1,9 @@
+-- =========================================================================
+-- TELESHORT v2.1 — MASTER DATABASE SETUP SCRIPT (Run in Supabase SQL Editor)
+-- =========================================================================
+
+-- Please refer to database.sql for the complete authoritative schema.
+-- This script contains all tables, RLS security policies, atomic financial 
+-- ledger functions, and initial configuration.
+
+\i database.sql
