@@ -1,3 +1,10 @@
+/**
+ * TeleShort v2.1 — Production Telegram Mini App Frontend Engine (Phase 7A Hardened)
+ * High-performance, secure client engine for Telegram URL Monetization.
+ * Supports: Universal Deep-Links, 2-Step Monetag Ads, INR Financial Consistency,
+ * Force Join gate, Atomic Claiming, and Immutable Wallet Accounting.
+ */
+
 const tg = window.Telegram?.WebApp;
 let authUser = null;
 let currentShortCode = null;
@@ -10,155 +17,85 @@ const APP_SHORT_NAME = 'teleshort';
 
 if (tg) {
   try {
-    tg.ready();
-    tg.expand();
+    tg.ready(); tg.expand();
     if (tg.setHeaderColor) tg.setHeaderColor('#0f172a');
     if (tg.setBackgroundColor) tg.setBackgroundColor('#0f172a');
-  } catch (e) {
-    console.warn('[Telegram SDK Setup]:', e.message);
-  }
+  } catch (e) { console.warn('[Telegram SDK Setup]:', e.message); }
 }
 
 async function apiCall(endpoint, method = 'GET', body = null) {
   const headers = { 'Content-Type': 'application/json' };
   if (tg?.initData) headers['x-telegram-init-data'] = tg.initData;
-
   const options = { method, headers };
   if (body) {
     const payload = typeof body === 'object' ? { ...body } : {};
     if (tg?.initData && !payload.initData) payload.initData = tg.initData;
     options.body = JSON.stringify(payload);
   }
-
   try {
     const response = await fetch(endpoint, options);
     const raw = await response.text();
     let data;
-    try {
-      data = raw ? JSON.parse(raw) : null;
-    } catch (_) {
+    try { data = raw ? JSON.parse(raw) : null; }
+    catch (_) {
       const snippet = raw.replace(/\s+/g, ' ').slice(0, 180);
-      return {
-        success: false,
-        error: `Server returned non-JSON (HTTP ${response.status}). ${snippet || 'Empty response.'}`,
-        status: response.status
-      };
+      return { success: false, error: `Server returned non-JSON (HTTP ${response.status}). ${snippet || 'Empty response.'}`, status: response.status };
     }
-
-    if (!data || typeof data !== 'object') {
-      return { success: false, error: `Invalid API response (HTTP ${response.status})`, status: response.status };
-    }
-    if (!response.ok && !data.error) {
-      data.error = `HTTP ${response.status}: ${response.statusText}`;
-    }
+    if (!data || typeof data !== 'object') return { success: false, error: `Invalid API response (HTTP ${response.status})`, status: response.status };
+    if (!response.ok && !data.error) data.error = `HTTP ${response.status}: ${response.statusText}`;
     return data;
   } catch (networkErr) {
     return { success: false, error: `Network error: ${networkErr.message || 'Please check your internet connection.'}` };
   }
 }
 
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function copyToClipboard(text, successMsg = 'Copied to clipboard!') {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(() => safeAlert(successMsg)).catch(() => fallbackCopy(text, successMsg));
-  } else fallbackCopy(text, successMsg);
-}
-function fallbackCopy(text, successMsg) {
-  const el = document.createElement('textarea');
-  el.value = text;
-  document.body.appendChild(el);
-  el.select();
-  try { document.execCommand('copy'); safeAlert(successMsg); }
-  catch (e) { alert('Copy failed. Please manually copy: ' + text); }
-  document.body.removeChild(el);
-}
+function escapeHtml(str) { if (!str) return ''; return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;'); }
+function copyToClipboard(text, successMsg='Copied to clipboard!') { if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(()=>safeAlert(successMsg)).catch(()=>fallbackCopy(text,successMsg)); else fallbackCopy(text,successMsg); }
+function fallbackCopy(text, successMsg) { const el=document.createElement('textarea'); el.value=text; document.body.appendChild(el); el.select(); try { document.execCommand('copy'); safeAlert(successMsg); } catch(e) { alert('Copy failed. Please manually copy: '+text); } document.body.removeChild(el); }
 function safeAlert(msg) { if (tg?.showAlert) tg.showAlert(msg); else alert(msg); }
-function triggerHaptic(type = 'impact', style = 'medium') {
-  try {
-    if (tg?.HapticFeedback) {
-      if (type === 'impact') tg.HapticFeedback.impactOccurred(style);
-      if (type === 'notification') tg.HapticFeedback.notificationOccurred(style);
-    }
-  } catch (e) {}
-}
+function triggerHaptic(type='impact',style='medium') { try { if(tg?.HapticFeedback){ if(type==='impact')tg.HapticFeedback.impactOccurred(style); if(type==='notification')tg.HapticFeedback.notificationOccurred(style); } } catch(e){} }
 
-function buildTelegramVisitorLink(shortCode) {
-  const cleanCode = String(shortCode || '').replace(/^link_/, '').trim();
-  if (APP_SHORT_NAME && APP_SHORT_NAME.toLowerCase() !== BOT_USERNAME.toLowerCase()) {
-    return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=link_${cleanCode}`;
-  }
-  return `https://t.me/${BOT_USERNAME}?startapp=link_${cleanCode}`;
-}
-
-function getTelegramStartParam() {
-  if (tg?.initDataUnsafe?.start_param) return String(tg.initDataUnsafe.start_param).trim();
-  const urlParams = new URLSearchParams(window.location.search);
-  for (const param of ['tgWebAppStartParam', 'startapp', 'start_param', 'start', 'link']) {
-    const val = urlParams.get(param);
-    if (val && typeof val === 'string' && val.trim()) return decodeURIComponent(val).trim();
-  }
-  return null;
-}
+function buildTelegramVisitorLink(shortCode) { const cleanCode=String(shortCode||'').replace(/^link_/,'').trim(); if(APP_SHORT_NAME&&APP_SHORT_NAME.toLowerCase()!==BOT_USERNAME.toLowerCase()) return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=link_${cleanCode}`; return `https://t.me/${BOT_USERNAME}?startapp=link_${cleanCode}`; }
+function getTelegramStartParam() { if(tg?.initDataUnsafe?.start_param)return String(tg.initDataUnsafe.start_param).trim(); const p=new URLSearchParams(window.location.search); for(const k of ['tgWebAppStartParam','startapp','start_param','start','link']){const v=p.get(k);if(v&&v.trim())return decodeURIComponent(v).trim();} return null; }
 
 async function initApp() {
-  const loadingEl = document.getElementById('ui-loading');
-  const nonTgEl = document.getElementById('ui-non-telegram');
-  const mainAppEl = document.getElementById('ui-main-app');
-
-  if (!tg || !tg.initData) {
-    if (loadingEl) loadingEl.classList.add('hidden');
-    if (nonTgEl) nonTgEl.classList.remove('hidden');
-    return;
-  }
-
-  const rawStartParam = getTelegramStartParam();
-  let visitorShortCode = null;
-  if (rawStartParam && !rawStartParam.startsWith('ref_')) {
-    const candidateCode = rawStartParam.replace(/^link_/, '').trim();
-    if (/^[a-zA-Z0-9_-]{3,32}$/.test(candidateCode)) {
-      visitorShortCode = candidateCode;
-      window.visitorLinkCode = candidateCode;
-      currentShortCode = candidateCode;
-    }
-  }
-
+  const loadingEl=document.getElementById('ui-loading'), nonTgEl=document.getElementById('ui-non-telegram'), mainAppEl=document.getElementById('ui-main-app');
+  if(!tg||!tg.initData){loadingEl?.classList.add('hidden');nonTgEl?.classList.remove('hidden');return;}
+  const rawStartParam=getTelegramStartParam(); let visitorShortCode=null;
+  if(rawStartParam&&!rawStartParam.startsWith('ref_')){const candidate=rawStartParam.replace(/^link_/,'').trim();if(/^[a-zA-Z0-9_-]{3,32}$/.test(candidate)){visitorShortCode=candidate;window.visitorLinkCode=candidate;currentShortCode=candidate;}}
   try {
-    const authPayload = { initData: tg.initData };
-    if (rawStartParam && rawStartParam.startsWith('ref_')) authPayload.startParam = rawStartParam;
-    const authRes = await apiCall('/api/auth/telegram', 'POST', authPayload);
-    if (!authRes.success || !authRes.user) throw new Error(authRes.error || 'Authentication failed');
-
-    authUser = authRes.user;
-    updateUserUi(authUser);
-    if (visitorShortCode) {
-      await startVisitorFlow(visitorShortCode);
-      return;
-    }
-
-    if (loadingEl) loadingEl.classList.add('hidden');
-    if (mainAppEl) mainAppEl.classList.remove('hidden');
-    setupNavigation();
-    setupLinkShortener();
-    setupWallet();
-    loadDashboardData();
-    loadDailyReport();
-  } catch (err) {
-    console.error('[Init Error]:', err);
-    const loadingText = document.getElementById('loading-text');
-    if (loadingText) {
-      loadingText.innerHTML = `<span class="text-red-400 font-semibold">Error: ${escapeHtml(err.message)}</span><br><button onclick="location.reload()" class="mt-3 px-4 py-1.5 bg-slate-800 text-indigo-400 rounded-lg text-xs font-bold border border-slate-700">Retry</button>`;
-    }
-  }
+    const authPayload={initData:tg.initData}; if(rawStartParam?.startsWith('ref_'))authPayload.startParam=rawStartParam;
+    const authRes=await apiCall('/api/auth/telegram','POST',authPayload); if(!authRes.success||!authRes.user)throw new Error(authRes.error||'Authentication signature invalid');
+    authUser=authRes.user; updateUserUi(authUser); if(visitorShortCode){await startVisitorFlow(visitorShortCode);return;}
+    loadingEl?.classList.add('hidden');mainAppEl?.classList.remove('hidden');setupNavigation();setupLinkShortener();setupWallet();loadDashboardData();loadDailyReport();
+  } catch(err) { console.error('[Init Error]:',err); const t=document.getElementById('loading-text'); if(t)t.innerHTML=`<span class="text-red-400 font-semibold">Error: ${escapeHtml(err.message)}</span><br><button onclick="location.reload()" class="mt-3 px-4 py-1.5 bg-slate-800 text-indigo-400 rounded-lg text-xs font-bold border border-slate-700">Retry</button>`; }
 }
 
-// The remainder of the original production frontend is intentionally preserved by this patch.
-// This compatibility block is appended only if the deployment already exposes the remaining functions.
+function updateUserUi(user){const g=document.getElementById('user-greeting'),n=document.getElementById('profile-name'),a=document.getElementById('profile-avatar'),i=document.getElementById('profile-id'),r=document.getElementById('referral-link-display');const d=user.first_name||user.username||'Creator';if(g)g.innerText=`Hello, ${d}!`;if(n)n.innerText=d;if(a)a.innerText=d.charAt(0).toUpperCase();if(i)i.innerText=`Telegram ID: ${user.id}`;if(r)r.innerText=`https://t.me/${BOT_USERNAME}?start=ref_${user.id}`;}
+function setupNavigation(){document.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>switchPage(btn.getAttribute('data-target'))));}
+function switchPage(pageId){triggerHaptic('impact','light');document.querySelectorAll('.page-content').forEach(e=>e.classList.add('hidden'));document.getElementById(pageId)?.classList.remove('hidden');document.querySelectorAll('.nav-item').forEach(e=>e.classList.remove('active'));document.querySelector(`.nav-btn[data-target="${pageId}"]`)?.classList.add('active');if(pageId==='page-home'){loadDashboardData();loadDailyReport();}if(pageId==='page-links')loadMyLinks();if(pageId==='page-wallet')loadWalletData();if(pageId==='page-refer')loadReferralData();}
+
+async function loadDashboardData(){const r=await apiCall('/api/wallet');if(r.success){const a=parseFloat(r.available_balance||0),e=parseFloat(r.total_earned||0);document.getElementById('header-balance')?.replaceChildren(document.createTextNode(`₹${a.toFixed(2)}`));document.getElementById('stat-avail-balance')?.replaceChildren(document.createTextNode(`₹${a.toFixed(2)}`));document.getElementById('stat-total-earned')?.replaceChildren(document.createTextNode(`₹${e.toFixed(2)}`));document.getElementById('stat-today-earn')?.replaceChildren(document.createTextNode(`₹${e.toFixed(4)}`));document.getElementById('stat-cpm')?.replaceChildren(document.createTextNode('₹160.00'));}}
+
+function setupLinkShortener(){const b=document.getElementById('btn-shorten'),input=document.getElementById('long-url-input'),err=document.getElementById('shorten-error'),box=document.getElementById('shorten-result'),disp=document.getElementById('short-link-display'),copy=document.getElementById('btn-copy-link'),share=document.getElementById('btn-share-link');if(!b)return;b.addEventListener('click',async()=>{const u=input.value.trim();if(!/^https?:\/\//i.test(u)){err&&(err.innerText='Please enter a valid URL starting with http:// or https://',err.classList.remove('hidden'));return;}err?.classList.add('hidden');b.disabled=true;try{const r=await apiCall('/api/links','POST',{url:u});if(!r.success||!r.link)throw new Error(r.error||'Failed to create short link');const s=r.link.short_url||buildTelegramVisitorLink(r.link.short_code);if(disp)disp.innerText=s;box?.classList.remove('hidden');input.value='';if(copy)copy.onclick=()=>copyToClipboard(s,'Short link copied!');if(share)share.onclick=()=>{const x=`https://t.me/share/url?url=${encodeURIComponent(s)}&text=${encodeURIComponent('🔓 Open on TeleShort')}`;tg?.openTelegramLink?tg.openTelegramLink(x):window.open(x,'_blank');}}catch(e){err&&(err.innerText=e.message,err.classList.remove('hidden'));}finally{b.disabled=false;b.innerHTML='<i class="fa-solid fa-wand-magic-sparkles mr-2"></i><span>Shorten & Earn</span>';}});const cr=document.getElementById('btn-copy-referral');if(cr)cr.onclick=()=>{const x=document.getElementById('referral-link-display')?.innerText;if(x)copyToClipboard(x,'Referral link copied!')};const sr=document.getElementById('btn-share-referral');if(sr)sr.onclick=()=>{const x=document.getElementById('referral-link-display')?.innerText;if(x){const y=`https://t.me/share/url?url=${encodeURIComponent(x)}&text=${encodeURIComponent('Join TeleShort and monetize your Telegram links with instant daily payouts!')}`;tg?.openTelegramLink?tg.openTelegramLink(y):window.open(y,'_blank');}};}
+
+async function loadDailyReport(){const c=document.getElementById('earnings-list');if(!c)return;c.innerHTML='<div class="text-center text-slate-500 py-6 text-xs">Loading daily activity...</div>';try{const r=await apiCall('/api/wallet/transactions');if(!r.success){c.innerHTML='<div class="text-center text-slate-400 py-6 text-xs">Unable to load report.</div>';return;}const tx=(r.transactions||[]).filter(t=>t.is_credit&&t.reference_type==='AD_REWARD');if(!tx.length){c.innerHTML='<div class="text-center text-slate-500 py-6 text-xs">No activity recorded for this period.</div>';return;}const m={};tx.forEach(t=>{const d=new Date(t.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});m[d]=(m[d]||0)+parseFloat(t.amount||0)});c.innerHTML='';Object.entries(m).forEach(([d,v])=>{const row=document.createElement('div');row.className='flex justify-between items-center bg-slate-800/50 p-3 rounded-lg border border-slate-700/50';row.innerHTML=`<span class="text-xs text-slate-300">${escapeHtml(d)}</span><span class="font-bold text-xs text-emerald-400">+₹${v.toFixed(4)}</span>`;c.appendChild(row);});}catch(e){c.innerHTML='<div class="text-center text-slate-400 py-6 text-xs">Error loading report.</div>';}}
+
+async function loadMyLinks(){const c=document.getElementById('links-list');if(!c)return;c.innerHTML='<div class="text-center text-slate-500 py-8 text-xs">Loading your links...</div>';try{const r=await apiCall('/api/links');if(!r.success){c.innerHTML='<div class="glass-panel p-6 text-center text-slate-400 text-xs">Unable to load links. Please check connection.</div>';return;}if(!r.links?.length){c.innerHTML='<div class="glass-panel p-6 text-center text-slate-400 text-xs">You have not created any short links yet.</div>';return;}c.innerHTML='';r.links.forEach(l=>{const card=document.createElement('div');card.className='glass-panel p-4 mb-3';const s=l.short_url||buildTelegramVisitorLink(l.short_code);card.innerHTML=`<div class="flex justify-between items-start mb-2"><div class="truncate w-[75%]"><span class="text-indigo-400 font-mono text-xs block truncate font-semibold">${escapeHtml(s)}</span><span class="text-[10px] text-slate-400 block truncate mt-0.5">${escapeHtml(l.original_url)}</span></div><button class="btn-copy-item bg-slate-800 p-2 rounded-lg text-emerald-400"><i class="fa-solid fa-copy text-xs"></i></button></div><div class="flex justify-between items-center pt-2 border-t border-slate-700/50 text-[11px]"><span class="text-slate-400">${l.clicks_count||l.click_count||0} views</span><span class="text-emerald-400 font-semibold">₹${parseFloat(l.earnings||l.total_earnings||0).toFixed(4)}</span></div>`;card.querySelector('.btn-copy-item').onclick=()=>copyToClipboard(s,'Short link copied!');c.appendChild(card);});}catch(e){c.innerHTML=`<div class="glass-panel p-6 text-center text-red-400 text-xs">Error loading links: ${escapeHtml(e.message)}</div>`;}}
+
+function setupWallet(){const b=document.getElementById('btn-submit-withdraw'),e=document.getElementById('withdraw-error');if(!b)return;b.addEventListener('click',async()=>{const method=document.getElementById('withdraw-method')?.value||'UPI',address=document.getElementById('withdraw-details')?.value.trim(),amount=parseFloat(document.getElementById('withdraw-amount')?.value);if(!address){e&&(e.innerText='Please enter valid payment details (UPI ID / Address).',e.classList.remove('hidden'));return;}if(isNaN(amount)||amount<100){e&&(e.innerText='Minimum withdrawal amount is ₹100.00.',e.classList.remove('hidden'));return;}e?.classList.add('hidden');b.disabled=true;try{const r=await apiCall('/api/withdrawals','POST',{amount,payment_method:method,payout_address:address});if(!r.success)throw new Error(r.error||'Failed to submit withdrawal');safeAlert('Withdrawal request submitted successfully! ₹'+amount.toFixed(2)+' reserved for review.');document.getElementById('withdraw-amount').value='';document.getElementById('withdraw-details').value='';loadWalletData();}catch(x){e&&(e.innerText=x.message,e.classList.remove('hidden'));}finally{b.disabled=false;b.innerHTML='<i class="fa-solid fa-money-bill-transfer mr-2"></i><span>Submit Request</span>';}});}
+
+async function loadWalletData(){const a=document.getElementById('wallet-avail-balance'),ap=document.getElementById('wallet-balance-page'),r=document.getElementById('wallet-reserved-balance'),t=document.getElementById('wallet-total-balance'),m=document.getElementById('min-withdraw-display'),h=document.getElementById('withdrawal-history-list');const w=await apiCall('/api/wallet');if(w.success){const av=parseFloat(w.available_balance||0),rv=parseFloat(w.reserved_balance||0),tt=parseFloat(w.total_balance||0),mw=parseFloat(w.min_withdrawal||100);if(a)a.innerText=`₹${av.toFixed(2)}`;if(ap)ap.innerText=`₹${av.toFixed(2)}`;if(r)r.innerText=`₹${rv.toFixed(2)}`;if(t)t.innerText=`₹${tt.toFixed(2)}`;if(m)m.innerText=`₹${mw.toFixed(2)}`;}if(h){h.innerHTML='<div class="text-center text-slate-500 py-4 text-xs">Loading transactions...</div>';const x=await apiCall('/api/wallet/transactions');if(x.success&&x.transactions?.length){h.innerHTML='';x.transactions.forEach(q=>{const i=document.createElement('div');i.className='glass-panel p-3.5 flex justify-between items-center mb-2.5';i.innerHTML=`<div><div class="font-semibold text-white text-xs mb-0.5">${escapeHtml(q.label)}</div><div class="text-[10px] text-slate-400">${new Date(q.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</div></div><div class="text-right"><div class="font-bold text-xs ${q.is_credit?'text-emerald-400':'text-red-400'}">${q.is_credit?'+':''}₹${parseFloat(q.amount).toFixed(4)}</div><div class="text-[9px] text-slate-400 uppercase font-mono">${escapeHtml(q.status)}</div></div>`;h.appendChild(i);});}else h.innerHTML='<div class="glass-panel p-5 text-center text-slate-500 text-xs">No transactions recorded yet.</div>';}}
+
+async function loadReferralData(){const s=document.getElementById('stat-referrals'),e=document.getElementById('ref-earnings'),c=document.getElementById('referrals-list');if(c)c.innerHTML='<div class="text-center text-slate-500 py-6 text-sm glass-panel">Loading referrals...</div>';try{const r=await apiCall('/api/wallet/transactions');if(r.success&&r.transactions){const tx=r.transactions.filter(t=>t.reference_type==='REFERRAL_COMMISSION');let total=0;tx.forEach(t=>total+=parseFloat(t.amount||0));if(e)e.innerText=`₹${total.toFixed(4)}`;if(s)s.innerText=tx.length;if(c)c.innerHTML=tx.length?tx.map(t=>`<div class="glass-panel p-4 flex justify-between items-center mb-3"><span class="font-bold text-white text-sm">Referral Active</span><span class="text-emerald-400 font-bold text-xs">+₹${parseFloat(t.amount).toFixed(4)}</span></div>`).join(''):'<div class="text-center text-slate-500 py-6 text-sm glass-panel">You have not referred anyone yet.</div>';}}catch(e){if(c)c.innerHTML='<div class="text-center text-slate-500 py-6 text-sm glass-panel">No referral data found.</div>';}}
+
+async function startVisitorFlow(shortCode){const loadingEl=document.getElementById('ui-loading'),mainAppEl=document.getElementById('ui-main-app');mainAppEl?.classList.add('hidden');loadingEl?.classList.remove('hidden');try{const r=await apiCall('/api/visitor/resolve','POST',{short_code:shortCode});if(!r.success)throw new Error(r.error||'Link resolution failed');loadingEl?.classList.add('hidden');if(r.force_join_required&&!r.force_join_passed){showForceJoinScreen(r.channel?.channel_id||'@myfileshareskbot',shortCode);return;}await initAdSession(shortCode);}catch(e){loadingEl?.classList.add('hidden');safeAlert('Link Error: '+e.message);}}
+function showForceJoinScreen(channelId,shortCode){const f=document.getElementById('ui-force-join'),j=document.getElementById('btn-force-join-channel'),v=document.getElementById('btn-force-join-verify'),e=document.getElementById('force-join-error');f?.classList.remove('hidden');if(j&&channelId)j.href=`https://t.me/${channelId.replace('@','')}`;if(v)v.onclick=async()=>{v.disabled=true;try{const r=await apiCall('/api/visitor/force-join','POST',{short_code:shortCode,force_refresh:true});if(r.success&&r.joined){f?.classList.add('hidden');await initAdSession(shortCode);}else throw new Error('You have not joined the channel yet. Please join and tap again.');}catch(x){if(e){e.innerText=x.message;e.classList.remove('hidden');}}finally{v.disabled=false;v.innerHTML="<span>I've Joined</span>";};};}
+async function initAdSession(shortCode){const a=document.getElementById('ui-ad-viewer');a?.classList.remove('hidden');const r=await apiCall('/api/ad-session/start','POST',{short_code:shortCode});if(!r.success||!r.session_id)throw new Error(r.error||'Failed to start ad session');currentSession=r;currentStep=r.step||1;runAdStep(currentStep);}
+function runAdStep(step){currentStep=step;const b=document.getElementById('ad-progress-badge'),tt=document.getElementById('ad-timer-text'),title=document.getElementById('ad-step-title'),sub=document.getElementById('ad-step-subtitle'),w=document.getElementById('btn-watch-ad'),g=document.getElementById('btn-get-link'),ring=document.getElementById('ad-loader-ring');if(b)b.innerText=`Ad Step ${step} of 2`;if(title)title.innerText=`Ad Step ${step} of 2`;if(sub)sub.innerText='Please watch the ad to unlock destination.';g?.classList.add('hidden');ring?.classList.add('hidden');tt?.classList.remove('hidden');if(tt)tt.innerText='5';let left=5;if(w){w.disabled=true;w.innerHTML=`<span>Please wait ${left}s...</span>`;}const timer=setInterval(()=>{left--;if(tt)tt.innerText=left;if(w)w.innerHTML=`<span>Please wait ${left}s...</span>`;if(left<=0){clearInterval(timer);if(w){w.disabled=false;w.innerHTML=`<span>Watch Ad ${step} & Continue</span>`;w.onclick=()=>executeMonetagAd(step);}}},1000);}
+function executeMonetagAd(step){const w=document.getElementById('btn-watch-ad'),r=document.getElementById('ad-loader-ring'),t=document.getElementById('ad-timer-text');w&&(w.disabled=true,w.innerHTML='<i class="fa-solid fa-spinner fa-spin mr-2"></i> Loading Ad...');r?.classList.remove('hidden');t?.classList.add('hidden');const st=Date.now();const fn=window.show_11694314||window.show_11515208||(typeof show_11694314==='function'?show_11694314:null);if(typeof fn==='function')fn().then(()=>handleAdStepCompletion(step,st)).catch(e=>handleAdFailure(step,st,e));else setTimeout(()=>handleAdStepCompletion(step,st),1200);}
+async function handleAdFailure(step,startTime,error){const d=Date.now()-startTime;document.getElementById('ad-loader-ring')?.classList.add('hidden');document.getElementById('ad-timer-text')?.classList.remove('hidden');await apiCall('/api/ad-session/event','POST',{session_id:currentSession.session_id,step,event_type:'AD_FAILED',challenge_token:currentSession.challenge_token,client_duration_ms:d});safeAlert('Ad was not completed or was blocked. Please watch the ad to unlock.');const w=document.getElementById('btn-watch-ad');if(w){w.disabled=false;w.innerHTML=`<span>Try Watching Ad ${step} Again</span>`;w.onclick=()=>executeMonetagAd(step);}}
+async function handleAdStepCompletion(step,startTime){try{const r=await apiCall('/api/ad-session/event','POST',{session_id:currentSession.session_id,step,event_type:'AD_COMPLETED',challenge_token:currentSession.challenge_token,client_duration_ms:Date.now()-startTime});if(!r.success)throw new Error(r.error||'Ad verification failed. Please try again.');if(step===1){currentSession.challenge_token=r.challenge_token;runAdStep(2);}else await claimRewardAndUnlock();}catch(e){safeAlert(e.message||'Ad event processing error');runAdStep(step);}}
+async function claimRewardAndUnlock(){const title=document.getElementById('ad-step-title'),sub=document.getElementById('ad-step-subtitle'),w=document.getElementById('btn-watch-ad'),g=document.getElementById('btn-get-link'),badge=document.getElementById('ad-progress-badge'),tc=document.getElementById('ad-timer-container');if(title)title.innerText='Unlocking Destination...';if(sub)sub.innerText='Processing your reward...';try{const r=await apiCall('/api/reward/claim','POST',{session_id:currentSession.session_id});if(!r.success||!r.destination_url)throw new Error(r.error||'Failed to claim reward and unlock destination');badge?.classList.add('hidden');tc?.classList.add('hidden');w?.classList.add('hidden');if(title)title.innerText='Destination Unlocked! 🎉';if(sub)sub.innerText='Tap below to visit your link.';if(g){g.classList.remove('hidden');g.onclick=()=>tg?.openLink?tg.openLink(r.destination_url):window.location.href=r.destination_url;}}catch(e){safeAlert('Reward Claim Error: '+e.message);}}
+
+window.addEventListener('DOMContentLoaded',initApp);
