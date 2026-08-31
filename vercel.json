@@ -6,9 +6,11 @@
       "includeFiles": "server/**/*.js"
     }
   },
+  "redirects": [
+    { "source": "/admin", "destination": "/admin.html", "permanent": false }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.js" },
-    { "source": "/admin", "destination": "/admin.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!admin(?:\\.html)?$).*)", "destination": "/index.html" }
   ]
 }
