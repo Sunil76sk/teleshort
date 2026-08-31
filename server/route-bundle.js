@@ -1,15 +1,8 @@
-/**
- * Vercel bundling manifest for the single gateway function.
- *
- * api/index.js intentionally lazy-loads route handlers with dynamic require().
- * Vercel's Node file tracer cannot reliably discover those dynamic paths, so
- * this file provides static CommonJS references for every creator/visitor route.
- * The handlers are still loaded lazily by api/index.js at request time; this
- * manifest only makes their files and transitive npm dependencies part of the
- * deployment bundle.
- */
-
+/** TeleShort v2.2 — Vercel static route bundle manifest */
 require('./auth/telegram');
+require('./user/me');
+require('./settings/public');
+require('./referrals/index');
 require('./links/index');
 require('./links/[id]');
 require('./visitor/resolve');
@@ -23,5 +16,19 @@ require('./wallet/index');
 require('./wallet/transactions');
 require('./withdrawals/index');
 require('./withdrawals/[id]');
-
+require('./admin/auth');
+require('./admin/dashboard');
+require('./admin/settings');
+require('./admin/users/index');
+require('./admin/users/[id]');
+require('./admin/links/index');
+require('./admin/links/[id]');
+require('./admin/withdrawals/index');
+require('./admin/withdrawals/[id]/decision');
+require('./admin/fraud/index');
+require('./admin/force-join/index');
+require('./admin/broadcasts/index');
+require('./admin/broadcasts/[id]/send');
+require('./admin/broadcasts/[id]/cancel');
+require('./admin/audit-logs/index');
 module.exports = true;
