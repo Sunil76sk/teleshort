@@ -32,7 +32,6 @@ function verifyTelegramWebAppData(initDataString, botToken, maxAgeSeconds = 8640
 
     urlParams.delete('hash');
 
-    // Check auth_date expiration
     const authDate = parseInt(urlParams.get('auth_date'), 10);
     if (authDate) {
       const nowSeconds = Math.floor(Date.now() / 1000);
@@ -41,20 +40,25 @@ function verifyTelegramWebAppData(initDataString, botToken, maxAgeSeconds = 8640
       }
     }
 
-    // Sort parameters alphabetically
     const dataCheckString = Array.from(urlParams.entries())
       .map(([k, v]) => `${k}=${v}`)
       .sort()
       .join('\n');
 
-    // Generate secret key: HMAC_SHA256("WebAppData", botToken)
-    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
+    // Telegram Mini App verification:
+    // secret_key = HMAC-SHA256(key=botToken, data="WebAppData")
+    // hash       = HMAC-SHA256(key=secret_key, data=dataCheckString)
+    const secretKey = crypto
+      .createHmac('sha256', botToken)
+      .update('WebAppData')
+      .digest();
 
-    // Calculate HMAC_SHA256(secretKey, dataCheckString)
-    const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+    const calculatedHash = crypto
+      .createHmac('sha256', secretKey)
+      .update(dataCheckString)
+      .digest('hex');
 
-    const isValid = calculatedHash === hash;
-    if (!isValid) {
+    if (calculatedHash !== hash) {
       return { valid: false, user: null, error: 'Invalid HMAC signature' };
     }
 
@@ -75,9 +79,6 @@ function verifyTelegramWebAppData(initDataString, botToken, maxAgeSeconds = 8640
   }
 }
 
-/**
- * Extract and authenticate Telegram user from request headers or body
- */
 function authenticateTelegramUser(req) {
   const botToken = process.env.BOT_TOKEN;
   const initData = req.headers['x-telegram-init-data'] || req.body?.initData || req.query?.initData;
@@ -94,23 +95,14 @@ function authenticateTelegramUser(req) {
   };
 }
 
-/**
- * Hash admin password using bcrypt
- */
 async function hashPassword(password) {
   return bcrypt.hash(password, 12);
 }
 
-/**
- * Verify admin password using bcrypt
- */
 async function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
-/**
- * Sign Admin JWT session token
- */
 function signAdminToken(adminUser) {
   const secret = process.env.ADMIN_SESSION_SECRET || 'fallback-admin-secret-change-in-production';
   return jwt.sign(
@@ -124,9 +116,6 @@ function signAdminToken(adminUser) {
   );
 }
 
-/**
- * Verify Admin JWT session token and check RBAC role
- */
 function verifyAdminToken(token, allowedRoles = []) {
   if (!token) return null;
   const secret = process.env.ADMIN_SESSION_SECRET || 'fallback-admin-secret-change-in-production';
@@ -134,13 +123,8 @@ function verifyAdminToken(token, allowedRoles = []) {
   try {
     const decoded = jwt.verify(token, secret);
     if (allowedRoles && allowedRoles.length > 0) {
-      // SUPER_ADMIN has access to all routes
-      if (decoded.role === 'SUPER_ADMIN') {
-        return decoded;
-      }
-      if (!allowedRoles.includes(decoded.role)) {
-        return null; // Role not authorized
-      }
+      if (decoded.role === 'SUPER_ADMIN') return decoded;
+      if (!allowedRoles.includes(decoded.role)) return null;
     }
     return decoded;
   } catch (e) {
@@ -148,9 +132,6 @@ function verifyAdminToken(token, allowedRoles = []) {
   }
 }
 
-/**
- * Extract and verify admin auth from request Authorization header
- */
 function authenticateAdmin(req, allowedRoles = []) {
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
