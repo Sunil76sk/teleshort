@@ -1,7 +1,8 @@
 /** TeleShort v2.2 — Standard API Response & CORS Utility */
 
 function setCorsHeaders(res) {
-  const allowedOrigin = process.env.MINI_APP_URL || process.env.ADMIN_ORIGIN || 'https://teleshort-seven.vercel.app';
+  const configured = String(process.env.MINI_APP_URL || process.env.ADMIN_ORIGIN || '').trim();
+  const allowedOrigin = configured && !configured.includes('your-app.vercel.app') ? configured.replace(/\/$/, '') : 'https://teleshort-seven.vercel.app';
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
