@@ -651,9 +651,9 @@ INSERT INTO public.settings (key, value) VALUES
     ('ads_config', '{"network": "MONETAG", "ads_per_link": 2, "timer_delay_seconds": 5, "min_ad_duration_ms": 4500, "session_timeout_seconds": 300}'::jsonb),
     ('referral_config', '{"commission_percent": 10, "min_qualifying_actions": 1}'::jsonb),
     ('withdrawal_config', '{"min_threshold_inr": 100.00, "cooldown_hours": 24, "allowed_methods": ["UPI", "Binance Pay", "USDT TRC20", "PayPal"]}'::jsonb),
-    ('force_join_config', '{"enabled": false, "channel_id": "@TeleShortOfficial", "cache_ttl_seconds": 3600}'::jsonb),
+    ('force_join_config', '{"enabled": false, "channel_id": "@myfileshareskbot", "cache_ttl_seconds": 3600}'::jsonb),
     ('maintenance_config', '{"enabled": false, "message": "System is currently undergoing scheduled maintenance."}'::jsonb),
-    ('social_links', '{"telegram_channel": "https://t.me/TeleShortOfficial", "youtube_channel": "https://youtube.com", "privacy_policy": "", "terms_of_service": ""}'::jsonb)
+    ('social_links', '{"telegram_channel": "https://t.me/myfileshareskbot", "youtube_channel": "https://youtube.com", "privacy_policy": "", "terms_of_service": ""}'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
 -- Insert Initial Super Admin (Username: 'admin', Password: 'AdminPassword123!')
