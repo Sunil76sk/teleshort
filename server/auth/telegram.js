@@ -1,8 +1,7 @@
 /**
  * TeleShort v2.1 — Telegram User Authentication Endpoint
  * POST /api/auth/telegram
- * Verifies Telegram WebApp initData and maps Telegram users to the existing
- * TeleShort Supabase schema (users.telegram_id / referrals.*_tg_id).
+ * Verifies Telegram WebApp initData and maps Telegram users to Supabase.
  */
 
 const { handleCors, sendSuccess, sendError } = require('../utils/response');
@@ -13,25 +12,19 @@ const { getClientIp, hashIp } = require('../utils/crypto');
 
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
-
-  if (req.method !== 'POST') {
-    return sendError(res, 'Method Not Allowed', 405);
-  }
+  if (req.method !== 'POST') return sendError(res, 'Method Not Allowed', 405);
 
   const clientIp = getClientIp(req);
   const ipHash = hashIp(clientIp);
-
   const rateLimit = await checkRateLimit(ipHash, 'auth_telegram', 30, 60);
-  if (!rateLimit.allowed) {
-    return sendError(res, 'Too many requests. Please slow down.', 429, 'RATE_LIMITED');
-  }
+  if (!rateLimit.allowed) return sendError(res, 'Too many requests. Please slow down.', 429, 'RATE_LIMITED');
 
   const { initData, startParam: clientStartParam } = req.body || {};
-  const botToken = process.env.BOT_TOKEN;
+  // Trim environment secrets because accidental whitespace in Vercel's
+  // environment variable editor otherwise makes every Telegram HMAC invalid.
+  const botToken = typeof process.env.BOT_TOKEN === 'string' ? process.env.BOT_TOKEN.trim() : '';
 
-  if (!botToken) {
-    return sendError(res, 'BOT_TOKEN is missing in server environment', 500, 'SERVER_CONFIG_ERROR');
-  }
+  if (!botToken) return sendError(res, 'BOT_TOKEN is missing in server environment', 500, 'SERVER_CONFIG_ERROR');
 
   const authResult = verifyTelegramWebAppData(initData, botToken);
   if (!authResult.valid || !authResult.user) {
@@ -48,15 +41,11 @@ module.exports = async function handler(req, res) {
 
   try {
     const supabase = getSupabaseClient();
-
-    // The live database uses users.id as an internal sequence PK and
-    // users.telegram_id as the stable Telegram identity.
     const { data: existingUser, error: fetchErr } = await supabase
       .from('users')
       .select('*')
       .eq('telegram_id', telegramId)
       .maybeSingle();
-
     if (fetchErr) throw fetchErr;
 
     if (existingUser) {
@@ -74,7 +63,6 @@ module.exports = async function handler(req, res) {
         .eq('id', existingUser.id)
         .select('*')
         .single();
-
       if (updateErr) throw updateErr;
 
       return sendSuccess(res, {
@@ -101,10 +89,7 @@ module.exports = async function handler(req, res) {
           .select('telegram_id, status, is_blocked')
           .eq('telegram_id', parsedRef)
           .maybeSingle();
-
-        if (refUser && refUser.status === 'ACTIVE' && refUser.is_blocked !== true) {
-          referrerTelegramId = parsedRef;
-        }
+        if (refUser && refUser.status === 'ACTIVE' && refUser.is_blocked !== true) referrerTelegramId = parsedRef;
       }
     }
 
@@ -122,7 +107,6 @@ module.exports = async function handler(req, res) {
       }])
       .select('*')
       .single();
-
     if (insertErr) throw insertErr;
 
     if (referrerTelegramId) {
