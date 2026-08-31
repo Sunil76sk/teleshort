@@ -23,8 +23,6 @@ function handleCors(req, res) {
 
 function sendSuccess(res, data = {}, statusCode = 200) {
   setCorsHeaders(res);
-  // Keep the canonical nested `data` envelope while also exposing its
-  // fields at the top level for the existing production frontend client.
   return res.status(statusCode).json({
     success: true,
     data,
@@ -34,12 +32,12 @@ function sendSuccess(res, data = {}, statusCode = 200) {
 
 function sendError(res, message = 'Internal Server Error', statusCode = 500, code = 'ERROR') {
   setCorsHeaders(res);
+  const safeMessage = typeof message === 'string' ? message : (message?.message || 'Internal Server Error');
   return res.status(statusCode).json({
     success: false,
-    error: {
-      message,
-      code
-    }
+    error: safeMessage,
+    error_code: code,
+    details: { message: safeMessage, code }
   });
 }
 
@@ -50,15 +48,10 @@ module.exports = {
   sendError
 };
 
-// api/index.js uses dynamic require() for route selection. Keep a static
-// reference in the dependency graph so Vercel bundles the route files and
-// their transitive npm dependencies (including jsonwebtoken).
 if (process.env.VERCEL === '1') {
   try {
     require('../route-bundle');
   } catch (error) {
-    // Do not break unrelated requests at module initialization. The gateway
-    // will surface the actual route/module error if that route is requested.
     console.warn('[Vercel Route Bundle Warning]:', error.message);
   }
 }
