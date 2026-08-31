@@ -4,25 +4,37 @@
 -- 16 Tables (including ad_events), Strict RLS, SECURITY DEFINER Atomic Procedures
 -- =========================================================================
 
--- =========================================================================
--- 1. RESET & CLEAN PUBLIC SCHEMA (Prevents column mismatch errors from older scripts)
--- =========================================================================
-DROP SCHEMA IF EXISTS public CASCADE;
-CREATE SCHEMA public;
-GRANT ALL ON SCHEMA public TO postgres;
-GRANT ALL ON SCHEMA public TO public;
-GRANT ALL ON SCHEMA public TO anon, authenticated, service_role;
-
 -- Enable Required Extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA public;
-CREATE EXTENSION IF NOT EXISTS "pgcrypto" SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- =========================================================================
+-- 1. CLEAN LEGACY SCHEMA (Prevents column mismatch errors from older scripts)
+-- =========================================================================
+DROP TABLE IF EXISTS public.broadcast_deliveries CASCADE;
+DROP TABLE IF EXISTS public.broadcasts CASCADE;
+DROP TABLE IF EXISTS public.fraud_events CASCADE;
+DROP TABLE IF EXISTS public.audit_logs CASCADE;
+DROP TABLE IF EXISTS public.admin_sessions CASCADE;
+DROP TABLE IF EXISTS public.admin_users CASCADE;
+DROP TABLE IF EXISTS public.settings CASCADE;
+DROP TABLE IF EXISTS public.force_join_channels CASCADE;
+DROP TABLE IF EXISTS public.referrals CASCADE;
+DROP TABLE IF EXISTS public.withdrawals CASCADE;
+DROP TABLE IF EXISTS public.wallet_transactions CASCADE;
+DROP TABLE IF EXISTS public.ad_events CASCADE;
+DROP TABLE IF EXISTS public.ad_sessions CASCADE;
+DROP TABLE IF EXISTS public.clicks CASCADE;
+DROP TABLE IF EXISTS public.links CASCADE;
+DROP TABLE IF EXISTS public.daily_stats CASCADE;
+DROP TABLE IF EXISTS public.users CASCADE;
 
 -- =========================================================================
 -- 2. TABLES DEFINITIONS (16 PRODUCTION TABLES)
 -- =========================================================================
 
 -- 1.1 USERS TABLE
-CREATE TABLE public.users (
+CREATE TABLE IF NOT EXISTS public.users (
     id BIGINT PRIMARY KEY, -- Telegram User ID (Immutable unique identity)
     username TEXT,
     first_name TEXT NOT NULL,
@@ -35,11 +47,11 @@ CREATE TABLE public.users (
     last_seen_at TIMESTAMPTZ,
     CONSTRAINT chk_no_self_referral CHECK (referred_by != id)
 );
-CREATE INDEX idx_users_referred_by ON public.users(referred_by);
-CREATE INDEX idx_users_status ON public.users(status);
+CREATE INDEX IF NOT EXISTS idx_users_referred_by ON public.users(referred_by);
+CREATE INDEX IF NOT EXISTS idx_users_status ON public.users(status);
 
 -- 1.2 LINKS TABLE
-CREATE TABLE public.links (
+CREATE TABLE IF NOT EXISTS public.links (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     short_code VARCHAR(16) UNIQUE NOT NULL,
     owner_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
@@ -52,12 +64,12 @@ CREATE TABLE public.links (
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT chk_valid_url_protocol CHECK (original_url ~* '^https?://')
 );
-CREATE INDEX idx_links_short_code ON public.links(short_code);
-CREATE INDEX idx_links_owner_id ON public.links(owner_id);
-CREATE INDEX idx_links_status ON public.links(status);
+CREATE INDEX IF NOT EXISTS idx_links_short_code ON public.links(short_code);
+CREATE INDEX IF NOT EXISTS idx_links_owner_id ON public.links(owner_id);
+CREATE INDEX IF NOT EXISTS idx_links_status ON public.links(status);
 
 -- 1.3 CLICKS TABLE (Auditable event log)
-CREATE TABLE public.clicks (
+CREATE TABLE IF NOT EXISTS public.clicks (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     link_id UUID NOT NULL REFERENCES public.links(id) ON DELETE CASCADE,
     visitor_telegram_id BIGINT,
@@ -70,12 +82,12 @@ CREATE TABLE public.clicks (
     fraud_score INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_clicks_link_id ON public.clicks(link_id);
-CREATE INDEX idx_clicks_dedup ON public.clicks(link_id, ip_hash, created_at);
-CREATE INDEX idx_clicks_visitor ON public.clicks(link_id, visitor_telegram_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_clicks_link_id ON public.clicks(link_id);
+CREATE INDEX IF NOT EXISTS idx_clicks_dedup ON public.clicks(link_id, ip_hash, created_at);
+CREATE INDEX IF NOT EXISTS idx_clicks_visitor ON public.clicks(link_id, visitor_telegram_id, created_at);
 
 -- 1.4 AD SESSIONS TABLE (State Machine: 10 State Stages)
-CREATE TABLE public.ad_sessions (
+CREATE TABLE IF NOT EXISTS public.ad_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     link_id UUID NOT NULL REFERENCES public.links(id) ON DELETE CASCADE,
     visitor_telegram_id BIGINT NOT NULL,
@@ -101,13 +113,14 @@ CREATE TABLE public.ad_sessions (
     started_at TIMESTAMPTZ DEFAULT NOW(),
     completed_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ NOT NULL,
-    metadata JSONB
+    metadata JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_ad_sessions_link_status ON public.ad_sessions(link_id, status);
-CREATE INDEX idx_ad_sessions_visitor ON public.ad_sessions(visitor_telegram_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ad_sessions_link_status ON public.ad_sessions(link_id, status);
+CREATE INDEX IF NOT EXISTS idx_ad_sessions_visitor ON public.ad_sessions(visitor_telegram_id, created_at DESC);
 
 -- 1.5 AD EVENTS TABLE (Provider Telemetry & Event Audit Trail)
-CREATE TABLE public.ad_events (
+CREATE TABLE IF NOT EXISTS public.ad_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     ad_session_id UUID NOT NULL REFERENCES public.ad_sessions(id) ON DELETE CASCADE,
     visitor_telegram_id BIGINT NOT NULL,
@@ -120,11 +133,11 @@ CREATE TABLE public.ad_events (
     metadata JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_ad_events_session ON public.ad_events(ad_session_id, step);
-CREATE INDEX idx_ad_events_visitor ON public.ad_events(visitor_telegram_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ad_events_session ON public.ad_events(ad_session_id, step);
+CREATE INDEX IF NOT EXISTS idx_ad_events_visitor ON public.ad_events(visitor_telegram_id, created_at DESC);
 
 -- 1.6 WALLET TRANSACTIONS TABLE (Immutable Accounting Ledger - Source of Truth)
-CREATE TABLE public.wallet_transactions (
+CREATE TABLE IF NOT EXISTS public.wallet_transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     type TEXT NOT NULL CHECK (type IN (
@@ -147,21 +160,21 @@ CREATE TABLE public.wallet_transactions (
     metadata JSONB,
     UNIQUE(reference_type, reference_id) -- Strict idempotency enforcement
 );
-CREATE INDEX idx_wallet_transactions_user ON public.wallet_transactions(user_id, created_at DESC);
-CREATE INDEX idx_wallet_transactions_ref ON public.wallet_transactions(reference_type, reference_id);
+CREATE INDEX IF NOT EXISTS idx_wallet_transactions_user ON public.wallet_transactions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_wallet_transactions_ref ON public.wallet_transactions(reference_type, reference_id);
 
 -- 1.7 REFERRALS TABLE
-CREATE TABLE public.referrals (
+CREATE TABLE IF NOT EXISTS public.referrals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     referrer_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     referred_id BIGINT UNIQUE NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT chk_no_self_ref_table CHECK (referrer_id != referred_id)
 );
-CREATE INDEX idx_referrals_referrer ON public.referrals(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON public.referrals(referrer_id);
 
 -- 1.8 WITHDRAWALS TABLE
-CREATE TABLE public.withdrawals (
+CREATE TABLE IF NOT EXISTS public.withdrawals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     amount NUMERIC(10,2) NOT NULL CHECK (amount > 0),
@@ -180,11 +193,11 @@ CREATE TABLE public.withdrawals (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     processed_at TIMESTAMPTZ
 );
-CREATE INDEX idx_withdrawals_user_id ON public.withdrawals(user_id, created_at DESC);
-CREATE INDEX idx_withdrawals_status ON public.withdrawals(status);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_user_id ON public.withdrawals(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_status ON public.withdrawals(status);
 
 -- 1.9 FORCE JOIN CHANNELS TABLE
-CREATE TABLE public.force_join_channels (
+CREATE TABLE IF NOT EXISTS public.force_join_channels (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     channel_id TEXT NOT NULL,
     channel_title TEXT,
@@ -194,7 +207,7 @@ CREATE TABLE public.force_join_channels (
 );
 
 -- 1.10 SETTINGS TABLE
-CREATE TABLE public.settings (
+CREATE TABLE IF NOT EXISTS public.settings (
     key VARCHAR(64) PRIMARY KEY,
     value JSONB NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -202,7 +215,7 @@ CREATE TABLE public.settings (
 );
 
 -- 1.11 ADMIN USERS TABLE (RBAC)
-CREATE TABLE public.admin_users (
+CREATE TABLE IF NOT EXISTS public.admin_users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
@@ -217,17 +230,17 @@ CREATE TABLE public.admin_users (
 );
 
 -- 1.12 ADMIN SESSIONS TABLE
-CREATE TABLE public.admin_sessions (
+CREATE TABLE IF NOT EXISTS public.admin_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     admin_id UUID NOT NULL REFERENCES public.admin_users(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_admin_sessions_admin ON public.admin_sessions(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_admin ON public.admin_sessions(admin_id);
 
 -- 1.13 AUDIT LOGS TABLE
-CREATE TABLE public.audit_logs (
+CREATE TABLE IF NOT EXISTS public.audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     actor_type TEXT NOT NULL CHECK (actor_type IN ('ADMIN', 'SYSTEM', 'USER')),
     actor_id TEXT,
@@ -237,10 +250,10 @@ CREATE TABLE public.audit_logs (
     metadata JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_audit_logs_action ON public.audit_logs(action, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON public.audit_logs(action, created_at DESC);
 
 -- 1.14 FRAUD EVENTS TABLE (Gating & Score Records)
-CREATE TABLE public.fraud_events (
+CREATE TABLE IF NOT EXISTS public.fraud_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id BIGINT REFERENCES public.users(id) ON DELETE CASCADE,
     event_type TEXT NOT NULL,
@@ -248,10 +261,10 @@ CREATE TABLE public.fraud_events (
     metadata JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_fraud_events_user ON public.fraud_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fraud_events_user ON public.fraud_events(user_id, created_at DESC);
 
 -- 1.15 BROADCASTS TABLE
-CREATE TABLE public.broadcasts (
+CREATE TABLE IF NOT EXISTS public.broadcasts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     message TEXT NOT NULL,
     image_url TEXT,
@@ -266,7 +279,7 @@ CREATE TABLE public.broadcasts (
 );
 
 -- 1.16 BROADCAST DELIVERIES TABLE
-CREATE TABLE public.broadcast_deliveries (
+CREATE TABLE IF NOT EXISTS public.broadcast_deliveries (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     broadcast_id UUID NOT NULL REFERENCES public.broadcasts(id) ON DELETE CASCADE,
     user_id BIGINT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
@@ -274,7 +287,7 @@ CREATE TABLE public.broadcast_deliveries (
     error_message TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-CREATE INDEX idx_broadcast_deliveries_bc ON public.broadcast_deliveries(broadcast_id);
+CREATE INDEX IF NOT EXISTS idx_broadcast_deliveries_bc ON public.broadcast_deliveries(broadcast_id);
 
 -- =========================================================================
 -- 2. ROW LEVEL SECURITY (RLS) POLICIES (DENY DIRECT PUBLIC ACCESS)
