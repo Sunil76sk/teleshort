@@ -1,7 +1,8 @@
 /**
  * TeleShort v2.1 — Telegram User Authentication Endpoint
  * POST /api/auth/telegram
- * Cryptographically verifies Telegram WebApp initData, creates or updates user, and links referrals.
+ * Verifies Telegram WebApp initData and maps Telegram users to the existing
+ * TeleShort Supabase schema (users.telegram_id / referrals.*_tg_id).
  */
 
 const { handleCors, sendSuccess, sendError } = require('../utils/response');
@@ -20,7 +21,6 @@ module.exports = async function handler(req, res) {
   const clientIp = getClientIp(req);
   const ipHash = hashIp(clientIp);
 
-  // Velocity rate limit on auth endpoint
   const rateLimit = await checkRateLimit(ipHash, 'auth_telegram', 30, 60);
   if (!rateLimit.allowed) {
     return sendError(res, 'Too many requests. Please slow down.', 429, 'RATE_LIMITED');
@@ -30,7 +30,7 @@ module.exports = async function handler(req, res) {
   const botToken = process.env.BOT_TOKEN;
 
   if (!botToken) {
-    return sendError(res, 'BOT_TOKEN is missing in server environment', 500);
+    return sendError(res, 'BOT_TOKEN is missing in server environment', 500, 'SERVER_CONFIG_ERROR');
   }
 
   const authResult = verifyTelegramWebAppData(initData, botToken);
@@ -39,30 +39,31 @@ module.exports = async function handler(req, res) {
   }
 
   const tgUser = authResult.user;
-  const startParam = authResult.startParam || clientStartParam;
+  const telegramId = Number(tgUser.id);
+  if (!Number.isSafeInteger(telegramId) || telegramId <= 0) {
+    return sendError(res, 'Invalid Telegram user ID', 400, 'INVALID_TELEGRAM_USER');
+  }
+
+  const startParam = authResult.startParam || clientStartParam || null;
 
   try {
     const supabase = getSupabaseClient();
 
-    // 1. Check if user already exists
+    // The live database uses users.id as an internal sequence PK and
+    // users.telegram_id as the stable Telegram identity.
     const { data: existingUser, error: fetchErr } = await supabase
       .from('users')
       .select('*')
-      .eq('id', tgUser.id)
-      .single();
+      .eq('telegram_id', telegramId)
+      .maybeSingle();
 
-    if (fetchErr && fetchErr.code !== 'PGRST116') {
-      // PGRST116 is "Row not found"
-      throw fetchErr;
-    }
+    if (fetchErr) throw fetchErr;
 
-    // 2. Check if user is blocked or banned
     if (existingUser) {
-      if (existingUser.status === 'BANNED' || existingUser.status === 'SUSPENDED') {
-        return sendError(res, `Your account is ${existingUser.status.toLowerCase()}. Contact support.`, 403, 'ACCOUNT_RESTRICTED');
+      if (existingUser.status === 'BANNED' || existingUser.status === 'SUSPENDED' || existingUser.is_blocked === true) {
+        return sendError(res, `Your account is ${existingUser.status?.toLowerCase() || 'restricted'}. Contact support.`, 403, 'ACCOUNT_RESTRICTED');
       }
 
-      // Update last seen and profile metadata
       const { data: updatedUser, error: updateErr } = await supabase
         .from('users')
         .update({
@@ -70,72 +71,84 @@ module.exports = async function handler(req, res) {
           first_name: tgUser.first_name || existingUser.first_name,
           last_seen_at: new Date().toISOString()
         })
-        .eq('id', tgUser.id)
+        .eq('id', existingUser.id)
         .select('*')
         .single();
 
       if (updateErr) throw updateErr;
 
       return sendSuccess(res, {
-        user: updatedUser,
+        user: {
+          id: telegramId,
+          telegram_id: telegramId,
+          db_id: updatedUser.id,
+          username: updatedUser.username,
+          first_name: updatedUser.first_name,
+          balance: updatedUser.balance,
+          total_earned: updatedUser.total_earned,
+          status: updatedUser.status
+        },
         isNew: false
       });
     }
 
-    // 3. New user registration
-    let referrerId = null;
-    if (startParam && typeof startParam === 'string' && startParam.startsWith('ref_')) {
-      const parsedRef = parseInt(startParam.replace('ref_', ''), 10);
-      if (parsedRef && !isNaN(parsedRef) && parsedRef !== tgUser.id) {
-        // Verify referrer exists and is active
+    let referrerTelegramId = null;
+    if (typeof startParam === 'string' && startParam.startsWith('ref_')) {
+      const parsedRef = Number.parseInt(startParam.slice(4), 10);
+      if (Number.isSafeInteger(parsedRef) && parsedRef > 0 && parsedRef !== telegramId) {
         const { data: refUser } = await supabase
           .from('users')
-          .select('id, status')
-          .eq('id', parsedRef)
-          .single();
+          .select('telegram_id, status, is_blocked')
+          .eq('telegram_id', parsedRef)
+          .maybeSingle();
 
-        if (refUser && refUser.status === 'ACTIVE') {
-          referrerId = refUser.id;
+        if (refUser && refUser.status === 'ACTIVE' && refUser.is_blocked !== true) {
+          referrerTelegramId = parsedRef;
         }
       }
     }
 
-    // Insert new user record
     const { data: newUser, error: insertErr } = await supabase
       .from('users')
-      .insert([
-        {
-          id: tgUser.id,
-          username: tgUser.username || null,
-          first_name: tgUser.first_name || 'User',
-          balance: 0.0000,
-          total_earned: 0.0000,
-          referred_by: referrerId,
-          status: 'ACTIVE',
-          last_seen_at: new Date().toISOString()
-        }
-      ])
+      .insert([{
+        telegram_id: telegramId,
+        username: tgUser.username || null,
+        first_name: tgUser.first_name || 'User',
+        balance: 0,
+        total_earnings: 0,
+        total_earned: 0,
+        status: 'ACTIVE',
+        last_seen_at: new Date().toISOString()
+      }])
       .select('*')
       .single();
 
     if (insertErr) throw insertErr;
 
-    // Create permanent referral record if applicable
-    if (referrerId) {
-      await supabase.from('referrals').insert([
-        {
-          referrer_id: referrerId,
-          referred_id: tgUser.id
-        }
-      ]);
+    if (referrerTelegramId) {
+      const { error: referralErr } = await supabase.from('referrals').insert([{
+        referrer_tg_id: referrerTelegramId,
+        referred_tg_id: telegramId,
+        status: 'pending'
+      }]);
+      if (referralErr) console.warn('[Telegram Auth Referral Warning]:', referralErr.message);
     }
 
     return sendSuccess(res, {
-      user: newUser,
+      user: {
+        id: telegramId,
+        telegram_id: telegramId,
+        db_id: newUser.id,
+        username: newUser.username,
+        first_name: newUser.first_name,
+        balance: newUser.balance,
+        total_earned: newUser.total_earned,
+        status: newUser.status
+      },
       isNew: true
     }, 201);
   } catch (error) {
     console.error('[Telegram Auth Error]:', error);
-    return sendError(res, error.message || 'Authentication error', 500);
+    return sendError(res, error.message || 'Authentication error', 500, 'AUTH_SERVER_ERROR');
   }
 };
