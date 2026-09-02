@@ -7,10 +7,106 @@ const { createAdChallengeToken, getClientIp, hashIp, hashUserAgent } = require('
 const { checkRateLimit } = require('../utils/ratelimit');
 const { getSupabaseClient } = require('../utils/db');
 
+// Keep the ad-session gate aligned with /api/visitor/force-join.
+// These are the currently configured production channels. They are only used
+// when FORCE_JOIN_CHANNELS / DB configuration is unavailable.
+const DEFAULT_FORCE_JOIN_CHANNELS = [
+  { channel_id: '-1002471479638', username: '@kannadanewmovie_sk', url: 'https://t.me/kannadanewmovie_sk' },
+  { channel_id: '-1001565776206', username: '', url: '' }
+];
+
+function normalizeChannels(value) {
+  if (!value) return [];
+  const raw = Array.isArray(value) ? value : [value];
+  return raw
+    .map((item) => {
+      if (typeof item === 'string' || typeof item === 'number') {
+        return { channel_id: String(item).trim(), username: '', url: '' };
+      }
+      if (!item || typeof item !== 'object') return null;
+      const channel_id = String(item.channel_id || item.id || '').trim();
+      if (!channel_id) return null;
+      const username = String(item.username || item.channel_username || '').trim();
+      const url = String(item.url || (username ? `https://t.me/${username.replace(/^@/, '')}` : '')).trim();
+      return { channel_id, username, url };
+    })
+    .filter(Boolean)
+    .filter((channel, index, all) => all.findIndex((x) => x.channel_id === channel.channel_id) === index);
+}
+
+function getEnvChannels() {
+  const configured = String(process.env.FORCE_JOIN_CHANNELS || '').trim();
+  if (!configured) return [];
+  try {
+    const parsed = JSON.parse(configured);
+    const channels = normalizeChannels(parsed);
+    if (channels.length) return channels;
+  } catch (_) {
+    const channels = normalizeChannels(configured.split(',').map((x) => x.trim()));
+    if (channels.length) return channels;
+  }
+  return [];
+}
+
+async function loadRequiredChannels(supabase) {
+  const envChannels = getEnvChannels();
+  if (envChannels.length) return envChannels;
+
+  try {
+    const { data, error } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'force_join_config')
+      .maybeSingle();
+
+    if (!error && data?.value) {
+      const config = data.value;
+      if (config.enabled === false) return [];
+      const channels = normalizeChannels(
+        config.channels || config.required_channels || config.channel_ids || config.channel_id
+      );
+      if (channels.length) return channels;
+    }
+  } catch (_) {
+    // If the legacy settings schema is unavailable, use the safe production fallback.
+  }
+
+  return DEFAULT_FORCE_JOIN_CHANNELS;
+}
+
+async function verifyForceJoin(supabase, visitorId, forceRefresh = false) {
+  const requiredChannels = await loadRequiredChannels(supabase);
+
+  // Empty list is an explicit admin/config decision to disable Force Join.
+  if (!requiredChannels.length) {
+    return { enabled: false, joined: true, channels: [] };
+  }
+
+  const channels = await Promise.all(
+    requiredChannels.map(async (channel) => {
+      const result = await checkChatMember(channel.channel_id, visitorId, forceRefresh);
+      return {
+        channel_id: channel.channel_id,
+        username: channel.username,
+        url: channel.url,
+        joined: Boolean(result.joined),
+        status: result.status,
+        error: result.joined ? undefined : result.error
+      };
+    })
+  );
+
+  return {
+    enabled: true,
+    joined: channels.every((channel) => channel.joined),
+    channels
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
   if (req.method !== 'POST') return sendError(res, 'Method Not Allowed', 405);
-  const { short_code, initData } = req.body || {};
+  const { short_code, initData, force_join_refresh = false } = req.body || {};
   if (!short_code) return sendError(res, 'Short code is required', 400, 'MISSING_SHORT_CODE');
 
   const auth = verifyTelegramWebAppData(initData || req.headers['x-telegram-init-data'], process.env.BOT_TOKEN);
@@ -37,11 +133,17 @@ module.exports = async function handler(req, res) {
     const userAgent = req.headers['user-agent'] || '';
     const fraudEval = await evaluateVisitorFraud({ ownerId: owner.telegram_id, visitorId, linkId: link.id, ipHash, userAgent, recentRequestsCount: rateLimit.count });
 
-    const { data: settingsRecord } = await supabase.from('settings').select('value').eq('key', 'force_join_config').maybeSingle();
-    const forceJoinConfig = settingsRecord?.value || { enabled: false };
-    if (forceJoinConfig.enabled && forceJoinConfig.channel_id) {
-      const memberCheck = await checkChatMember(forceJoinConfig.channel_id, visitorId, false);
-      if (!memberCheck.joined) return sendError(res, 'You must join the official channel before watching ads', 403, 'FORCE_JOIN_REQUIRED');
+    // Force Join is a hard gate. It must be checked here as well as in the
+    // dedicated endpoint so a client cannot bypass the gate by calling ad/start directly.
+    const forceJoin = await verifyForceJoin(supabase, visitorId, Boolean(force_join_refresh));
+    if (!forceJoin.joined) {
+      return sendError(
+        res,
+        'You must join all required channels before watching ads',
+        403,
+        'FORCE_JOIN_REQUIRED',
+        { channels: forceJoin.channels, joined: false }
+      );
     }
 
     const expiresAt = Date.now() + 5 * 60 * 1000;
