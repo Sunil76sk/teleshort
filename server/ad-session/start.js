@@ -7,9 +7,6 @@ const { createAdChallengeToken, getClientIp, hashIp, hashUserAgent } = require('
 const { checkRateLimit } = require('../utils/ratelimit');
 const { getSupabaseClient } = require('../utils/db');
 
-// Keep the ad-session gate aligned with /api/visitor/force-join.
-// These are the currently configured production channels. They are only used
-// when FORCE_JOIN_CHANNELS / DB configuration is unavailable.
 const DEFAULT_FORCE_JOIN_CHANNELS = [
   { channel_id: '-1002471479638', username: '@kannadanewmovie_sk', url: 'https://t.me/kannadanewmovie_sk' },
   { channel_id: '-1001565776206', username: '', url: '' }
@@ -76,11 +73,7 @@ async function loadRequiredChannels(supabase) {
 
 async function verifyForceJoin(supabase, visitorId, forceRefresh = false) {
   const requiredChannels = await loadRequiredChannels(supabase);
-
-  // Empty list is an explicit admin/config decision to disable Force Join.
-  if (!requiredChannels.length) {
-    return { enabled: false, joined: true, channels: [] };
-  }
+  if (!requiredChannels.length) return { enabled: false, joined: true, channels: [] };
 
   const channels = await Promise.all(
     requiredChannels.map(async (channel) => {
@@ -96,11 +89,24 @@ async function verifyForceJoin(supabase, visitorId, forceRefresh = false) {
     })
   );
 
-  return {
-    enabled: true,
-    joined: channels.every((channel) => channel.joined),
-    channels
-  };
+  return { enabled: true, joined: channels.every((channel) => channel.joined), channels };
+}
+
+function sendForceJoinRequired(res, channels) {
+  // Keep the normal API error contract while exposing the exact channels needed
+  // by the client to render the Force Join UI.
+  handleCors({ method: 'POST' }, res);
+  return res.status(403).json({
+    success: false,
+    error: 'You must join all required channels before watching ads',
+    error_code: 'FORCE_JOIN_REQUIRED',
+    details: {
+      code: 'FORCE_JOIN_REQUIRED',
+      message: 'You must join all required channels before watching ads',
+      joined: false,
+      channels
+    }
+  });
 }
 
 module.exports = async function handler(req, res) {
@@ -133,18 +139,8 @@ module.exports = async function handler(req, res) {
     const userAgent = req.headers['user-agent'] || '';
     const fraudEval = await evaluateVisitorFraud({ ownerId: owner.telegram_id, visitorId, linkId: link.id, ipHash, userAgent, recentRequestsCount: rateLimit.count });
 
-    // Force Join is a hard gate. It must be checked here as well as in the
-    // dedicated endpoint so a client cannot bypass the gate by calling ad/start directly.
     const forceJoin = await verifyForceJoin(supabase, visitorId, Boolean(force_join_refresh));
-    if (!forceJoin.joined) {
-      return sendError(
-        res,
-        'You must join all required channels before watching ads',
-        403,
-        'FORCE_JOIN_REQUIRED',
-        { channels: forceJoin.channels, joined: false }
-      );
-    }
+    if (!forceJoin.joined) return sendForceJoinRequired(res, forceJoin.channels);
 
     const expiresAt = Date.now() + 5 * 60 * 1000;
     const { data: active } = await supabase.from('ad_sessions').select('*').eq('link_id', link.id).eq('visitor_telegram_id', visitorId).in('status', ['AD_1_STARTED', 'AD_2_STARTED']).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(1);
