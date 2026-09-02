@@ -6,6 +6,7 @@ const { evaluateVisitorFraud } = require('../utils/fraud');
 const { getClientIp, hashIp, hashUserAgent } = require('../utils/crypto');
 const { checkRateLimit } = require('../utils/ratelimit');
 const { getSupabaseClient } = require('../utils/db');
+const { loadRequiredChannels } = require('./force-join-config');
 
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
@@ -41,15 +42,55 @@ module.exports = async function handler(req, res) {
     if (!owner) return sendError(res, 'Link owner account not found', 404, 'OWNER_NOT_FOUND');
     if (owner.status === 'BANNED' || owner.status === 'SUSPENDED' || owner.is_blocked === true) return sendError(res, 'This link is unavailable', 410, 'OWNER_RESTRICTED');
 
+    // HARD GATE: every required Force Join channel must be joined before the visit can proceed.
+    const requiredChannels = await loadRequiredChannels();
+    let forceJoinPassed = true;
+    let channelInfo = null;
+    let forceJoinChannels = [];
+
+    if (requiredChannels.length) {
+      const checks = await Promise.all(requiredChannels.map(async (channel) => {
+        const result = await checkChatMember(channel.channel_id, visitorId, false);
+        return {
+          channel_id: channel.channel_id,
+          username: channel.username,
+          url: channel.url,
+          invite_link: channel.url,
+          joined: Boolean(result.joined),
+          status: result.status,
+          cached: Boolean(result.cached),
+          error: result.joined ? undefined : result.error
+        };
+      }));
+
+      forceJoinChannels = checks;
+      forceJoinPassed = checks.every((item) => item.joined === true);
+      channelInfo = checks[0] || null;
+
+      if (!forceJoinPassed) {
+        return sendSuccess(res, {
+          resolved: true,
+          short_code: link.short_code || link.short_id,
+          link_id: link.id,
+          is_owner: Number(owner.telegram_id) === visitorId,
+          is_eligible: false,
+          ineligible_reason: 'FORCE_JOIN_REQUIRED',
+          fraud_status: 'BLOCKED_BY_FORCE_JOIN',
+          force_join_required: true,
+          force_join_passed: false,
+          channel: channelInfo,
+          channels: forceJoinChannels
+        });
+      }
+    }
+
     const clientIp = getClientIp(req);
     const ipHash = hashIp(clientIp);
     const userAgent = req.headers['user-agent'] || '';
     const uaHash = hashUserAgent(userAgent);
     const isSelfClick = Number(owner.telegram_id) === visitorId;
-
     const fraudEval = await evaluateVisitorFraud({ ownerId: owner.telegram_id, visitorId, linkId: link.id, ipHash, userAgent, recentRequestsCount: rateLimit.count });
 
-    // Record the visit once per visitor/link/cooldown window. This record is later upgraded to eligible by the reward transaction.
     const { data: recentClick } = await supabase.from('clicks').select('id').eq('link_id', link.id).eq('visitor_telegram_id', visitorId).gte('created_at', new Date(Date.now()-24*60*60*1000).toISOString()).limit(1).maybeSingle();
     const isUnique = !recentClick;
     if (isUnique) {
@@ -58,18 +99,19 @@ module.exports = async function handler(req, res) {
       await supabase.from('links').update({ click_count:Number(link.click_count||0)+1, updated_at:new Date().toISOString() }).eq('id',link.id);
     }
 
-    const { data: settingsRecord } = await supabase.from('settings').select('value').eq('key','force_join_config').maybeSingle();
-    const forceJoinConfig = settingsRecord?.value || { enabled:false };
-    const forceJoinRequired = Boolean(forceJoinConfig.enabled && forceJoinConfig.channel_id);
-    let forceJoinPassed = true;
-    let channelInfo = null;
-    if (forceJoinRequired) {
-      channelInfo = { channel_id:forceJoinConfig.channel_id, invite_link:forceJoinConfig.invite_link || `https://t.me/${String(forceJoinConfig.channel_id).replace('@','')}` };
-      const memberCheck = await checkChatMember(forceJoinConfig.channel_id, visitorId, false);
-      forceJoinPassed = memberCheck.joined;
-    }
-
-    return sendSuccess(res, { resolved:true, short_code:link.short_code || link.short_id, link_id:link.id, is_owner:isSelfClick, is_eligible:isUnique && fraudEval.isEligible && !isSelfClick, ineligible_reason:isSelfClick?'SELF_CLICK':(!isUnique?'DUPLICATE_CLICK':fraudEval.reason), fraud_status:fraudEval.status, force_join_required:forceJoinRequired, force_join_passed:forceJoinPassed, channel:channelInfo });
+    return sendSuccess(res, {
+      resolved:true,
+      short_code:link.short_code || link.short_id,
+      link_id:link.id,
+      is_owner:isSelfClick,
+      is_eligible:isUnique && fraudEval.isEligible && !isSelfClick,
+      ineligible_reason:isSelfClick?'SELF_CLICK':(!isUnique?'DUPLICATE_CLICK':fraudEval.reason),
+      fraud_status:fraudEval.status,
+      force_join_required:requiredChannels.length > 0,
+      force_join_passed:forceJoinPassed,
+      channel:channelInfo,
+      channels:forceJoinChannels
+    });
   } catch (error) {
     console.error('[Visitor Resolve Error]:', error);
     return sendError(res, error.message || 'Error resolving link', 500, 'VISITOR_RESOLVE_ERROR');
