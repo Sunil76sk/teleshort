@@ -1,42 +1,86 @@
 /**
  * TeleShort v2.1 — Telegram Bot API & Deep-Link Utility
- * Provides server-side Force Join verification and Main Mini App deep-link formatting.
+ * Server-side Force Join verification and Telegram Mini App links.
  */
 
 const { redisGet, redisSet } = require('./redis');
 
+const JOINED_STATUSES = new Set(['creator', 'administrator', 'member', 'restricted']);
+
 async function checkChatMember(channelId, telegramUserId, forceRefresh = false) {
-  if (!channelId || !telegramUserId) return { joined: false, status: 'INVALID_PARAMETERS', error: 'Missing channelId or userId' };
-  const botToken = process.env.BOT_TOKEN;
-  if (!botToken) return { joined: true, status: 'BYPASS_NO_TOKEN', error: 'BOT_TOKEN missing' };
+  if (!channelId || !telegramUserId) {
+    return { joined: false, status: 'INVALID_PARAMETERS', error: 'Missing channelId or userId' };
+  }
+
+  const botToken = String(process.env.BOT_TOKEN || '').trim();
+  if (!botToken) {
+    // NEVER fail open. Missing credentials must never unlock a destination.
+    return { joined: false, status: 'CONFIGURATION_ERROR', error: 'Telegram BOT_TOKEN is not configured on the server' };
+  }
+
   const sanitizedChannel = String(channelId).trim();
   const sanitizedUser = String(telegramUserId).trim();
   const cacheKey = `force_join:cache:${sanitizedChannel.toLowerCase()}:${sanitizedUser}`;
 
   if (!forceRefresh) {
     const cachedStatus = await redisGet(cacheKey);
-    if (cachedStatus) return { joined: ['MEMBER','ADMIN','CREATOR','RESTRICTED'].includes(cachedStatus), status: cachedStatus, cached: true };
+    if (cachedStatus) {
+      const normalized = String(cachedStatus).toLowerCase();
+      return {
+        joined: JOINED_STATUSES.has(normalized),
+        status: String(cachedStatus).toUpperCase(),
+        cached: true
+      };
+    }
   }
 
   try {
-    const apiUrl = `https://api.telegram.org/bot${botToken}/getChatMember?chat_id=${encodeURIComponent(sanitizedChannel)}&user_id=${encodeURIComponent(sanitizedUser)}`;
-    const response = await fetch(apiUrl, { method: 'GET', headers: { Accept: 'application/json' } });
+    const apiUrl = `https://api.telegram.org/bot${encodeURIComponent(botToken)}/getChatMember?chat_id=${encodeURIComponent(sanitizedChannel)}&user_id=${encodeURIComponent(sanitizedUser)}`;
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: { Accept: 'application/json' }
+    });
+
+    if (!response.ok) {
+      return {
+        joined: false,
+        status: 'TELEGRAM_HTTP_ERROR',
+        error: `Telegram API returned HTTP ${response.status}`
+      };
+    }
+
     const data = await response.json();
-    if (!data.ok) return { joined: false, status: 'CHECK_FAILED', error: data.description || 'Failed to verify channel membership' };
-    const memberStatus = data.result?.status;
-    const isMember = ['creator', 'administrator', 'member', 'restricted'].includes(memberStatus);
-    if (isMember) await redisSet(cacheKey, memberStatus.toUpperCase(), 3600);
-    else await redisSet(cacheKey, 'NOT_MEMBER', 120);
-    return { joined: isMember, status: memberStatus ? memberStatus.toUpperCase() : 'UNKNOWN', cached: false };
+    if (!data.ok) {
+      return {
+        joined: false,
+        status: 'CHECK_FAILED',
+        error: data.description || 'Telegram membership verification failed'
+      };
+    }
+
+    const memberStatus = String(data.result?.status || '').toLowerCase();
+    const isMember = JOINED_STATUSES.has(memberStatus);
+
+    // Only cache an authoritative membership result. Never cache an error as joined.
+    await redisSet(cacheKey, isMember ? memberStatus.toUpperCase() : 'NOT_MEMBER', isMember ? 3600 : 120);
+
+    return {
+      joined: isMember,
+      status: memberStatus ? memberStatus.toUpperCase() : 'UNKNOWN',
+      cached: false
+    };
   } catch (error) {
-    return { joined: false, status: 'NETWORK_ERROR', error: error.message };
+    return {
+      joined: false,
+      status: 'NETWORK_ERROR',
+      error: error.message || 'Telegram membership request failed'
+    };
   }
 }
 
 /**
  * Generate the MAIN Telegram Mini App link.
  * Main Mini App format: https://t.me/<bot>?startapp=<parameter>
- * A /<short_name> path is used only when a distinct APP_SHORT_NAME is configured.
  */
 function buildTelegramDeepLink(shortCode) {
   const botUsername = (process.env.BOT_USERNAME || 'myfileshareskbot').replace(/^@/, '').trim();
@@ -50,5 +94,8 @@ function buildTelegramDeepLink(shortCode) {
   return `https://t.me/${botUsername}?startapp=link_${encodeURIComponent(cleanCode)}`;
 }
 
-function buildTelegramVisitorLink(shortCode) { return buildTelegramDeepLink(shortCode); }
+function buildTelegramVisitorLink(shortCode) {
+  return buildTelegramDeepLink(shortCode);
+}
+
 module.exports = { checkChatMember, buildTelegramDeepLink, buildTelegramVisitorLink };
