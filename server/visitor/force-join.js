@@ -8,76 +8,7 @@ const { handleCors, sendSuccess, sendError } = require('../utils/response');
 const { verifyTelegramWebAppData } = require('../utils/auth');
 const { checkChatMember } = require('../utils/telegram');
 const { checkRateLimit } = require('../utils/ratelimit');
-const { getSupabaseClient } = require('../utils/db');
-
-// Production fallback for the currently configured TeleShort channels.
-// This is server-side only; credentials are never exposed to the browser.
-const DEFAULT_FORCE_JOIN_CHANNELS = [
-  { channel_id: '-1002471479638', username: '@kannadanewmovie_sk', url: 'https://t.me/kannadanewmovie_sk' },
-  { channel_id: '-1001565776206', username: '', url: '' }
-];
-
-function normalizeChannels(value) {
-  if (!value) return [];
-  const raw = Array.isArray(value) ? value : [value];
-  return raw
-    .map((item) => {
-      if (typeof item === 'string' || typeof item === 'number') {
-        return { channel_id: String(item).trim(), username: '', url: '' };
-      }
-      if (!item || typeof item !== 'object') return null;
-      const channel_id = String(item.channel_id || item.id || '').trim();
-      if (!channel_id) return null;
-      const username = String(item.username || item.channel_username || '').trim();
-      const url = String(item.url || (username ? `https://t.me/${username.replace(/^@/, '')}` : '')).trim();
-      return { channel_id, username, url };
-    })
-    .filter(Boolean)
-    .filter((channel, index, all) => all.findIndex((x) => x.channel_id === channel.channel_id) === index);
-}
-
-function getEnvChannels() {
-  const configured = String(process.env.FORCE_JOIN_CHANNELS || '').trim();
-  if (!configured) return [];
-  try {
-    const parsed = JSON.parse(configured);
-    const channels = normalizeChannels(parsed);
-    if (channels.length) return channels;
-  } catch (_) {
-    const channels = normalizeChannels(configured.split(',').map((x) => x.trim()));
-    if (channels.length) return channels;
-  }
-  return [];
-}
-
-async function loadRequiredChannels() {
-  // Preferred: explicit server environment configuration.
-  const envChannels = getEnvChannels();
-  if (envChannels.length) return envChannels;
-
-  // Backward-compatible attempt for the previous key/value settings design.
-  // The current committed database.sql uses a different settings shape, so failure
-  // here must not unlock the visitor; we fall back to the known server configuration.
-  try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'force_join_config')
-      .maybeSingle();
-
-    if (!error && data?.value) {
-      const config = data.value;
-      const channels = normalizeChannels(config.channels || config.required_channels || config.channel_ids || config.channel_id);
-      if (channels.length) return channels;
-      if (config.enabled === false) return [];
-    }
-  } catch (_) {
-    // Schema mismatch/temporary DB issue: use the safe server fallback below.
-  }
-
-  return DEFAULT_FORCE_JOIN_CHANNELS;
-}
+const { loadRequiredChannels } = require('./force-join-config');
 
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
@@ -103,14 +34,22 @@ module.exports = async function handler(req, res) {
   try {
     const requiredChannels = await loadRequiredChannels();
 
-    // Empty list means Force Join is intentionally disabled.
     if (!requiredChannels.length) {
-      return sendSuccess(res, { joined: true, channels: [], message: 'Force Join is disabled.' });
+      return sendSuccess(res, {
+        joined: true,
+        channels: [],
+        message: 'Force Join is disabled.'
+      });
     }
 
     const results = await Promise.all(
       requiredChannels.map(async (channel) => {
-        const result = await checkChatMember(channel.channel_id, visitorId, Boolean(force_refresh));
+        const result = await checkChatMember(
+          channel.channel_id,
+          visitorId,
+          Boolean(force_refresh)
+        );
+
         return {
           channel_id: channel.channel_id,
           username: channel.username,
@@ -135,6 +74,11 @@ module.exports = async function handler(req, res) {
     });
   } catch (error) {
     console.error('[Force Join Verification Error]:', error);
-    return sendError(res, error.message || 'Membership verification failed', 500, 'FORCE_JOIN_CHECK_FAILED');
+    return sendError(
+      res,
+      error.message || 'Membership verification failed',
+      500,
+      'FORCE_JOIN_CHECK_FAILED'
+    );
   }
 };
