@@ -18,12 +18,15 @@
       verify.parentNode.insertBefore(container, verify);
     }
 
+    if (container.dataset.rendered === 'true') return;
+
     container.innerHTML = CHANNELS.map((channel, index) => `
       <a href="${channel.url}" target="_blank" rel="noopener noreferrer"
          class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl block text-sm border border-slate-700">
         <i class="fa-brands fa-telegram mr-2 text-indigo-400"></i>${index + 1}. ${channel.title}
       </a>
     `).join('');
+    container.dataset.rendered = 'true';
 
     const oldButton = document.getElementById('btn-force-join-channel');
     if (oldButton) oldButton.classList.add('hidden');
