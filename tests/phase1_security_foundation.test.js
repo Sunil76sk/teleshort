@@ -15,6 +15,7 @@ const databaseSql = fs.readFileSync(path.join(root, 'database.sql'), 'utf8');
 // Telegram Mini App authentication: signature + freshness + Telegram user validation.
 assert.match(auth, /verifyTelegramWebAppData/);
 assert.match(auth, /Missing Telegram authentication signature/);
+assert.match(auth, /Telegram auth_date is missing or invalid/);
 assert.match(auth, /initData has expired/);
 assert.match(auth, /authDate > nowSeconds \+ 60/);
 assert.match(auth, /timingSafeEqual/);
