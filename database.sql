@@ -1,15 +1,14 @@
 -- =========================================================================
--- TELESHORT v2.1 — UNIVERSAL SUPABASE PRODUCTION SCHEMA
--- Supports both Standalone Frontend & Backend Gateway with Zero Permission Errors
+-- TELESHORT v2.2 — LEGACY BASELINE SCHEMA
+-- IMPORTANT: Production deployments should apply migrations/ in order.
+-- This file is retained for reference/bootstrap only and does NOT grant
+-- direct client CRUD access to protected tables.
 -- =========================================================================
 
--- Enable Required Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- =========================================================================
--- 1. DROP OLD TABLES (Clean slate migration)
--- =========================================================================
+-- 1. LEGACY TABLE BASELINE
 DROP TABLE IF EXISTS public.click_logs CASCADE;
 DROP TABLE IF EXISTS public.clicks CASCADE;
 DROP TABLE IF EXISTS public.ad_events CASCADE;
@@ -29,11 +28,6 @@ DROP TABLE IF EXISTS public.daily_stats CASCADE;
 DROP TABLE IF EXISTS public.users CASCADE;
 DROP TABLE IF EXISTS public.settings CASCADE;
 
--- =========================================================================
--- 2. CREATE TABLES
--- =========================================================================
-
--- 2.1 USERS TABLE
 CREATE TABLE IF NOT EXISTS public.users (
     id BIGSERIAL PRIMARY KEY,
     telegram_id BIGINT UNIQUE,
@@ -54,7 +48,6 @@ CREATE TABLE IF NOT EXISTS public.users (
 CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON public.users(telegram_id);
 CREATE INDEX IF NOT EXISTS idx_users_is_blocked ON public.users(is_blocked);
 
--- 2.2 SETTINGS TABLE
 CREATE TABLE IF NOT EXISTS public.settings (
     id BIGSERIAL PRIMARY KEY,
     cpm NUMERIC(10,2) DEFAULT 2.00,
@@ -72,18 +65,16 @@ CREATE TABLE IF NOT EXISTS public.settings (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Insert Default Settings Row
 INSERT INTO public.settings (
-    cpm, refer_percent, ads_per_link, ad_timer, 
-    payment_methods, min_withdraw, tg_channel_url, 
+    cpm, refer_percent, ads_per_link, ad_timer,
+    payment_methods, min_withdraw, tg_channel_url,
     yt_channel_url, privacy_url, terms_url, maintenance_mode
 ) VALUES (
-    2.00, 10, 1, 5, 
-    'UPI, Binance Pay, USDT TRC20', 5.00, 'https://t.me/myfileshareskbot', 
+    2.00, 10, 1, 5,
+    'UPI, Binance Pay, USDT TRC20', 5.00, 'https://t.me/myfileshareskbot',
     '', '', '', FALSE
 );
 
--- 2.3 LINKS TABLE
 CREATE TABLE IF NOT EXISTS public.links (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     short_id TEXT UNIQUE NOT NULL,
@@ -103,7 +94,6 @@ CREATE INDEX IF NOT EXISTS idx_links_short_id ON public.links(short_id);
 CREATE INDEX IF NOT EXISTS idx_links_short_code ON public.links(short_code);
 CREATE INDEX IF NOT EXISTS idx_links_user_id ON public.links(user_id);
 
--- 2.4 CLICK LOGS TABLE (For Dedup and Views Tracking)
 CREATE TABLE IF NOT EXISTS public.click_logs (
     id BIGSERIAL PRIMARY KEY,
     link_id UUID REFERENCES public.links(id) ON DELETE CASCADE,
@@ -114,7 +104,6 @@ CREATE INDEX IF NOT EXISTS idx_click_logs_link ON public.click_logs(link_id);
 CREATE INDEX IF NOT EXISTS idx_click_logs_user ON public.click_logs(clicker_tg_id);
 CREATE INDEX IF NOT EXISTS idx_click_logs_created ON public.click_logs(created_at);
 
--- 2.5 WITHDRAWALS TABLE
 CREATE TABLE IF NOT EXISTS public.withdrawals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id BIGINT,
@@ -129,7 +118,6 @@ CREATE TABLE IF NOT EXISTS public.withdrawals (
 CREATE INDEX IF NOT EXISTS idx_withdrawals_user ON public.withdrawals(user_id);
 CREATE INDEX IF NOT EXISTS idx_withdrawals_status ON public.withdrawals(status);
 
--- 2.6 REFERRALS TABLE
 CREATE TABLE IF NOT EXISTS public.referrals (
     id BIGSERIAL PRIMARY KEY,
     referrer_tg_id BIGINT,
@@ -140,21 +128,21 @@ CREATE TABLE IF NOT EXISTS public.referrals (
 CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON public.referrals(referrer_tg_id);
 CREATE INDEX IF NOT EXISTS idx_referrals_referred ON public.referrals(referred_tg_id);
 
--- =========================================================================
--- 3. PERMISSIONS & ROW LEVEL SECURITY (RLS)
--- Grants full access so client and server can read and write without 403 Forbidden
--- =========================================================================
+-- 2. SECURITY BASELINE
+-- Backend gateway architecture: anon/authenticated receive no direct table CRUD.
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO service_role;
 
--- Grant schema access
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL ROUTINES IN SCHEMA public FROM anon, authenticated;
 
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon, authenticated;
 
--- Enable RLS
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.links ENABLE ROW LEVEL SECURITY;
@@ -162,14 +150,10 @@ ALTER TABLE public.click_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.withdrawals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.referrals ENABLE ROW LEVEL SECURITY;
 
--- Permissive RLS Policies for Anon and Authenticated
-CREATE POLICY "Public full access on users" ON public.users FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access on settings" ON public.settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access on links" ON public.links FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access on click_logs" ON public.click_logs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access on withdrawals" ON public.withdrawals FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Public full access on referrals" ON public.referrals FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+-- Deliberately no anon/authenticated policies are created.
+-- service_role is the only server-side data path and bypasses RLS.
 
 -- =========================================================================
--- SCHEMA CREATION COMPLETE (READY FOR TELESHORT)
+-- BASELINE COMPLETE — apply migrations/phase1_security_foundation.sql and
+-- subsequent migrations for the production schema.
 -- =========================================================================
