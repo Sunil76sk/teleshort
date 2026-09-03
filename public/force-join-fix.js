@@ -1,9 +1,16 @@
-/* TeleShort Force Join UI fix: keep the backend as the authority and render every required channel. */
+/* TeleShort runtime hardening: Force Join UI + fail-closed Monetag SDK guard. */
 (() => {
   const CHANNELS = [
     { title: 'Main Movie Channel', url: 'https://t.me/+IbHLv5W4jpBkYzBl' },
     { title: 'Backup Public Channel', url: 'https://t.me/kannadanewmovie_sk' }
   ];
+
+  // The ad engine must never convert a missing Monetag SDK into a successful
+  // completion. The existing app falls back to a timer; replace that branch
+  // with a rejected provider call when no real SDK function is available.
+  if (typeof window.show_11694314 !== 'function' && typeof window.show_11515208 !== 'function') {
+    window.show_11694314 = () => Promise.reject(new Error('Monetag SDK unavailable'));
+  }
 
   function render() {
     const gate = document.getElementById('ui-force-join');
