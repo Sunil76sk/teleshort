@@ -4,6 +4,7 @@ const { verifyPassword, signAdminToken, buildAdminSessionCookie, buildAdminLogou
 const { getSupabaseClient } = require('../utils/db');
 const { checkRateLimit } = require('../utils/ratelimit');
 const { getClientIp, hashIp } = require('../utils/crypto');
+const { writeAuditLog } = require('../utils/audit');
 
 module.exports = async function handler(req, res) {
   if (handleCors(req, res)) return;
@@ -19,11 +20,17 @@ module.exports = async function handler(req, res) {
   const clientIp = getClientIp(req);
   const ipHash = hashIp(clientIp);
   const rateLimit = await checkRateLimit(ipHash, 'admin_login', 5, 900);
-  if (!rateLimit.allowed) return sendError(res, 'Too many login attempts. Please try again after 15 minutes.', 429, 'ADMIN_RATE_LIMITED');
+  if (!rateLimit.allowed) {
+    await writeAuditLog({ actorType: 'SYSTEM', action: 'ADMIN_LOGIN_RATE_LIMITED', targetType: 'AUTH', metadata: { ip_hash: ipHash } });
+    return sendError(res, 'Too many login attempts. Please try again after 15 minutes.', 429, 'ADMIN_RATE_LIMITED');
+  }
 
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
-  if (!username || !password) return sendError(res, 'Username and password are required', 400, 'MISSING_CREDENTIALS');
+  if (!username || !password) {
+    await writeAuditLog({ actorType: 'SYSTEM', action: 'ADMIN_LOGIN_MISSING_CREDENTIALS', targetType: 'AUTH', metadata: { ip_hash: ipHash } });
+    return sendError(res, 'Username and password are required', 400, 'MISSING_CREDENTIALS');
+  }
 
   try {
     const supabase = getSupabaseClient();
@@ -34,20 +41,26 @@ module.exports = async function handler(req, res) {
       .maybeSingle();
 
     if (error) throw error;
-    if (!adminUser || adminUser.status !== 'ACTIVE') return sendError(res, 'Invalid admin username or password', 401, 'INVALID_CREDENTIALS');
-    if (!(await verifyPassword(password, adminUser.password_hash))) return sendError(res, 'Invalid admin username or password', 401, 'INVALID_CREDENTIALS');
+    if (!adminUser || adminUser.status !== 'ACTIVE') {
+      await writeAuditLog({ actorType: 'SYSTEM', action: 'ADMIN_LOGIN_FAILED', targetType: 'AUTH', metadata: { ip_hash: ipHash, reason: 'INVALID_CREDENTIALS' } });
+      return sendError(res, 'Invalid admin username or password', 401, 'INVALID_CREDENTIALS');
+    }
+    if (!(await verifyPassword(password, adminUser.password_hash))) {
+      await writeAuditLog({ actorType: 'SYSTEM', action: 'ADMIN_LOGIN_FAILED', targetType: 'AUTH', metadata: { ip_hash: ipHash, reason: 'INVALID_CREDENTIALS' } });
+      return sendError(res, 'Invalid admin username or password', 401, 'INVALID_CREDENTIALS');
+    }
 
     const token = signAdminToken({ id: adminUser.id, username: adminUser.username, role: adminUser.role });
     res.setHeader('Set-Cookie', buildAdminSessionCookie(token));
 
-    await supabase.from('audit_logs').insert([{
-      actor_type: 'ADMIN',
-      actor_id: String(adminUser.id),
+    await writeAuditLog({
+      actorType: 'ADMIN',
+      actorId: adminUser.id,
       action: 'ADMIN_LOGIN_SUCCESS',
-      target_type: 'AUTH',
-      target_id: String(adminUser.id),
+      targetType: 'AUTH',
+      targetId: adminUser.id,
       metadata: { ip_hash: ipHash, username: adminUser.username, role: adminUser.role }
-    }]);
+    });
 
     return sendSuccess(res, {
       user: { id: adminUser.id, username: adminUser.username, role: adminUser.role },
@@ -55,6 +68,7 @@ module.exports = async function handler(req, res) {
     });
   } catch (error) {
     console.error('[Admin Auth Error]:', error);
+    await writeAuditLog({ actorType: 'SYSTEM', action: 'ADMIN_LOGIN_ERROR', targetType: 'AUTH', metadata: { ip_hash: ipHash } });
     return sendError(res, error.message || 'Admin authentication error', 500, 'ADMIN_AUTH_ERROR');
   }
 };
