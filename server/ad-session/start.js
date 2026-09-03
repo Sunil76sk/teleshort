@@ -6,73 +6,10 @@ const { evaluateVisitorFraud } = require('../utils/fraud');
 const { createAdChallengeToken, getClientIp, hashIp, hashUserAgent } = require('../utils/crypto');
 const { checkRateLimit } = require('../utils/ratelimit');
 const { getSupabaseClient } = require('../utils/db');
-
-const DEFAULT_FORCE_JOIN_CHANNELS = [
-  { channel_id: '-1002471479638', username: '@kannadanewmovie_sk', url: 'https://t.me/kannadanewmovie_sk' },
-  { channel_id: '-1001565776206', username: '', url: '' }
-];
-
-function normalizeChannels(value) {
-  if (!value) return [];
-  const raw = Array.isArray(value) ? value : [value];
-  return raw
-    .map((item) => {
-      if (typeof item === 'string' || typeof item === 'number') {
-        return { channel_id: String(item).trim(), username: '', url: '' };
-      }
-      if (!item || typeof item !== 'object') return null;
-      const channel_id = String(item.channel_id || item.id || '').trim();
-      if (!channel_id) return null;
-      const username = String(item.username || item.channel_username || '').trim();
-      const url = String(item.url || (username ? `https://t.me/${username.replace(/^@/, '')}` : '')).trim();
-      return { channel_id, username, url };
-    })
-    .filter(Boolean)
-    .filter((channel, index, all) => all.findIndex((x) => x.channel_id === channel.channel_id) === index);
-}
-
-function getEnvChannels() {
-  const configured = String(process.env.FORCE_JOIN_CHANNELS || '').trim();
-  if (!configured) return [];
-  try {
-    const parsed = JSON.parse(configured);
-    const channels = normalizeChannels(parsed);
-    if (channels.length) return channels;
-  } catch (_) {
-    const channels = normalizeChannels(configured.split(',').map((x) => x.trim()));
-    if (channels.length) return channels;
-  }
-  return [];
-}
-
-async function loadRequiredChannels(supabase) {
-  const envChannels = getEnvChannels();
-  if (envChannels.length) return envChannels;
-
-  try {
-    const { data, error } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'force_join_config')
-      .maybeSingle();
-
-    if (!error && data?.value) {
-      const config = data.value;
-      if (config.enabled === false) return [];
-      const channels = normalizeChannels(
-        config.channels || config.required_channels || config.channel_ids || config.channel_id
-      );
-      if (channels.length) return channels;
-    }
-  } catch (_) {
-    // If the legacy settings schema is unavailable, use the safe production fallback.
-  }
-
-  return DEFAULT_FORCE_JOIN_CHANNELS;
-}
+const { loadRequiredChannels } = require('../visitor/force-join-config');
 
 async function verifyForceJoin(supabase, visitorId, forceRefresh = false) {
-  const requiredChannels = await loadRequiredChannels(supabase);
+  const requiredChannels = await loadRequiredChannels();
   if (!requiredChannels.length) return { enabled: false, joined: true, channels: [] };
 
   const channels = await Promise.all(
@@ -93,9 +30,6 @@ async function verifyForceJoin(supabase, visitorId, forceRefresh = false) {
 }
 
 function sendForceJoinRequired(res, channels) {
-  // Keep the normal API error contract while exposing the exact channels needed
-  // by the client to render the Force Join UI.
-  handleCors({ method: 'POST' }, res);
   return res.status(403).json({
     success: false,
     error: 'You must join all required channels before watching ads',
@@ -139,6 +73,8 @@ module.exports = async function handler(req, res) {
     const userAgent = req.headers['user-agent'] || '';
     const fraudEval = await evaluateVisitorFraud({ ownerId: owner.telegram_id, visitorId, linkId: link.id, ipHash, userAgent, recentRequestsCount: rateLimit.count });
 
+    // Defense in depth: the visitor flow already checks Force Join, but the ad-session
+    // boundary must enforce it too so callers cannot bypass the gate by calling this API directly.
     const forceJoin = await verifyForceJoin(supabase, visitorId, Boolean(force_join_refresh));
     if (!forceJoin.joined) return sendForceJoinRequired(res, forceJoin.channels);
 
@@ -161,12 +97,14 @@ module.exports = async function handler(req, res) {
       challenge_hash: ipHash,
       started_at: new Date().toISOString(),
       expires_at: new Date(expiresAt).toISOString(),
-      metadata: { is_owner: isOwner, is_eligible: eligible, ineligible_reason: isOwner ? 'SELF_CLICK' : fraudEval.reason, fraud_score: fraudEval.score, fraud_status: fraudEval.status, ip_hash: ipHash, ua_hash: hashUserAgent(userAgent) }
+      metadata: { is_owner: isOwner, is_eligible: eligible, ineligible_reason: isOwner ? 'SELF_CLICK' : fraudEval.reason, fraud_score: fraudEval.score, fraud_status: fraudEval.status, ip_hash: ipHash, ua_hash: hashUserAgent(userAgent), provider: 'MONETAG' }
     }]).select('id,step,status').single();
     if (sessionErr) throw sessionErr;
 
     const startEventId = `START_1_${adSession.id}`;
-    await supabase.from('ad_events').insert([{ ad_session_id: adSession.id, visitor_telegram_id: visitorId, link_id: link.id, step: 1, network: 'MONETAG', event_type: 'AD_STARTED', event_id: startEventId, idempotency_key: `EVENT:${startEventId}`, metadata: { ip_hash: ipHash, ua_hash: hashUserAgent(userAgent), fraud_score: fraudEval.score } }]);
+    const { error: startEventErr } = await supabase.from('ad_events').insert([{ ad_session_id: adSession.id, visitor_telegram_id: visitorId, link_id: link.id, step: 1, network: 'MONETAG', event_type: 'AD_STARTED', event_id: startEventId, idempotency_key: `EVENT:${startEventId}`, metadata: { ip_hash: ipHash, ua_hash: hashUserAgent(userAgent), fraud_score: fraudEval.score } }]);
+    if (startEventErr && startEventErr.code !== '23505') throw startEventErr;
+
     const challengeToken = createAdChallengeToken({ session_id: adSession.id, short_code: link.short_code || link.short_id, step: 1, visitor_id: visitorId, ip_hash: ipHash, is_owner: isOwner, is_eligible: eligible, min_duration_ms: 4500, created_at: Date.now(), expires_at: expiresAt });
     return sendSuccess(res, { session_id: adSession.id, short_code: link.short_code || link.short_id, step: 1, total_steps: 2, network: 'MONETAG', status: 'AD_1_STARTED', challenge_token: challengeToken, timer_seconds: 5, is_owner: isOwner, is_eligible: eligible, ineligible_reason: isOwner ? 'SELF_CLICK' : fraudEval.reason, resumed: false });
   } catch (error) {
