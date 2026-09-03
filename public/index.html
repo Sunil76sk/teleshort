@@ -58,14 +58,19 @@
                 <i class="fa-solid fa-bullhorn"></i>
             </div>
             <h2 class="text-xl font-bold text-white mb-2">Channel Join Required</h2>
-            <p class="text-xs text-slate-300 mb-6 leading-relaxed">To unlock this destination link, please join our official Telegram channel.</p>
-            
-            <a id="btn-force-join-channel" href="https://t.me/myfileshareskbot" target="_blank" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl block text-sm mb-3 border border-slate-700">
-                <i class="fa-brands fa-telegram mr-2 text-indigo-400"></i>Join Channel
-            </a>
-            
+            <p class="text-xs text-slate-300 mb-6 leading-relaxed">To unlock this destination link, please join all required Telegram channels.</p>
+
+            <div id="force-join-channels" class="space-y-2.5 mb-3">
+                <a href="https://t.me/+IbHLv5W4jpBkYzBl" target="_blank" rel="noopener noreferrer" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl block text-sm border border-slate-700">
+                    <i class="fa-brands fa-telegram mr-2 text-indigo-400"></i>1. Main Movie Channel
+                </a>
+                <a href="https://t.me/kannadanewmovie_sk" target="_blank" rel="noopener noreferrer" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl block text-sm border border-slate-700">
+                    <i class="fa-brands fa-telegram mr-2 text-indigo-400"></i>2. Backup Public Channel
+                </a>
+            </div>
+
             <button id="btn-force-join-verify" class="w-full primary-gradient text-white font-bold py-3.5 rounded-xl text-sm shadow-lg active:scale-95 transition-transform">
-                <span>I've Joined</span>
+                <span>I've Joined Both</span>
             </button>
             <div id="force-join-error" class="hidden text-red-400 text-xs mt-3"></div>
         </div>
@@ -107,7 +112,6 @@
         <div id="pages-container">
             <!-- PAGE: HOME -->
             <div id="page-home" class="page-content fade-in">
-                <!-- Link Shortener Box -->
                 <div class="mx-4 mb-6 p-6 glass-panel relative overflow-hidden">
                     <h2 class="text-xs font-bold text-indigo-400 mb-3 uppercase tracking-wider"><i class="fa-solid fa-link mr-2"></i> Create Short Link</h2>
                     <input type="url" id="long-url-input" placeholder="Paste your destination URL here..." class="w-full bg-slate-900/80 border border-slate-700 text-white rounded-xl p-4 mb-4 focus:outline-none focus:border-indigo-500 transition-colors text-sm shadow-inner">
@@ -126,46 +130,22 @@
                     </div>
                 </div>
 
-                <!-- Stats Grid (INR) -->
                 <div class="grid grid-cols-2 gap-4 mx-4 mb-6">
-                    <div class="glass-panel p-5 text-center relative overflow-hidden">
-                        <div class="text-slate-400 text-xs mb-1 uppercase font-semibold">Available</div>
-                        <div class="text-2xl font-bold text-emerald-400" id="stat-avail-balance">₹0.00</div>
-                    </div>
-                    <div class="glass-panel p-5 text-center relative overflow-hidden">
-                        <div class="text-slate-400 text-xs mb-1 uppercase font-semibold">Total Earned</div>
-                        <div class="text-2xl font-bold text-white" id="stat-total-earned">₹0.00</div>
-                    </div>
-                    <div class="glass-panel p-5 col-span-2 flex justify-between items-center bg-gradient-to-r from-slate-800 to-indigo-900/30">
-                        <div>
-                            <div class="text-indigo-300 text-xs font-bold uppercase mb-0.5">Publisher CPM</div>
-                            <div class="text-[10px] text-slate-400">Fixed internal payout per 1,000 views</div>
-                        </div>
-                        <div class="text-2xl font-bold text-indigo-400" id="stat-cpm">₹160.00</div>
-                    </div>
+                    <div class="glass-panel p-5 text-center relative overflow-hidden"><div class="text-slate-400 text-xs mb-1 uppercase font-semibold">Available</div><div class="text-2xl font-bold text-emerald-400" id="stat-avail-balance">₹0.00</div></div>
+                    <div class="glass-panel p-5 text-center relative overflow-hidden"><div class="text-slate-400 text-xs mb-1 uppercase font-semibold">Total Earned</div><div class="text-2xl font-bold text-white" id="stat-total-earned">₹0.00</div></div>
+                    <div class="glass-panel p-5 col-span-2 flex justify-between items-center bg-gradient-to-r from-slate-800 to-indigo-900/30"><div><div class="text-indigo-300 text-xs font-bold uppercase mb-0.5">Publisher CPM</div><div class="text-[10px] text-slate-400">Fixed internal payout per 1,000 views</div></div><div class="text-2xl font-bold text-indigo-400" id="stat-cpm">₹160.00</div></div>
                 </div>
 
-                <!-- Daily Report Box -->
                 <div class="mx-4 mb-6 p-5 glass-panel">
-                    <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
-                        <h3 class="font-bold text-sm text-white"><i class="fa-solid fa-calendar-days mr-2 text-indigo-400"></i> Daily Report</h3>
-                        <span class="text-[10px] text-slate-400 uppercase font-semibold">Activity</span>
-                    </div>
-                    <div id="earnings-list" class="space-y-2 max-h-60 overflow-y-auto pr-1">
-                        <div class="text-center text-slate-500 py-6 text-xs">Loading activity...</div>
-                    </div>
+                    <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3"><h3 class="font-bold text-sm text-white"><i class="fa-solid fa-calendar-days mr-2 text-indigo-400"></i> Daily Report</h3><span class="text-[10px] text-slate-400 uppercase font-semibold">Activity</span></div>
+                    <div id="earnings-list" class="space-y-2 max-h-60 overflow-y-auto pr-1"><div class="text-center text-slate-500 py-6 text-xs">Loading activity...</div></div>
                 </div>
             </div>
 
             <!-- PAGE: LINKS -->
             <div id="page-links" class="page-content hidden mx-4 mb-6 fade-in">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-bold text-white"><i class="fa-solid fa-link text-indigo-400 mr-2"></i> My Links</h2>
-                    <button onclick="loadMyLinks()" class="text-xs text-indigo-400 font-bold hover:underline"><i class="fa-solid fa-rotate-right mr-1"></i>Refresh</button>
-                </div>
-                <div id="links-list" class="space-y-3">
-                    <div class="text-center text-slate-500 py-10"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 block text-indigo-400"></i> Loading your links...</div>
-                </div>
+                <div class="flex justify-between items-center mb-4"><h2 class="text-lg font-bold text-white"><i class="fa-solid fa-link text-indigo-400 mr-2"></i> My Links</h2><button onclick="loadMyLinks()" class="text-xs text-indigo-400 font-bold hover:underline"><i class="fa-solid fa-rotate-right mr-1"></i>Refresh</button></div>
+                <div id="links-list" class="space-y-3"><div class="text-center text-slate-500 py-10"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 block text-indigo-400"></i> Loading your links...</div></div>
             </div>
 
             <!-- PAGE: REFER -->
@@ -174,119 +154,42 @@
                     <div class="w-16 h-16 rounded-full bg-slate-800 border border-indigo-500/30 mx-auto flex items-center justify-center mb-3 text-2xl text-indigo-400 shadow-lg shadow-indigo-500/20"><i class="fa-solid fa-users"></i></div>
                     <h2 class="text-xl font-bold text-white mb-1">Invite Friends</h2>
                     <p class="text-xs text-slate-300 mb-5">Earn a lifetime <span class="text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded" id="refer-commission">10%</span> commission from your friends' link earnings!</p>
-                    <div class="bg-slate-900 rounded-xl p-2 flex items-center justify-between border border-slate-700">
-                        <span id="referral-link-display" class="text-xs font-mono text-slate-300 truncate px-2 w-[75%]">Generating link...</span>
-                        <button id="btn-copy-referral" class="primary-gradient text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-transform">Copy</button>
-                    </div>
+                    <div class="bg-slate-900 rounded-xl p-2 flex items-center justify-between border border-slate-700"><span id="referral-link-display" class="text-xs font-mono text-slate-300 truncate px-2 w-[75%]">Generating link...</span><button id="btn-copy-referral" class="primary-gradient text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md active:scale-95 transition-transform">Copy</button></div>
                 </div>
-                
-                <div class="grid grid-cols-2 gap-4 mb-6">
-                    <div class="glass-panel p-4 text-center">
-                        <div class="text-slate-400 text-xs mb-1 uppercase font-semibold">Total Referrals</div>
-                        <div class="text-2xl font-bold text-white" id="stat-referrals">0</div>
-                    </div>
-                    <div class="glass-panel p-4 text-center border border-emerald-500/30 bg-emerald-900/10">
-                        <div class="text-emerald-400 text-xs mb-1 uppercase font-semibold">Referral Earned</div>
-                        <div class="text-2xl font-bold text-emerald-400" id="ref-earnings">₹0.00</div>
-                    </div>
-                </div>
-
+                <div class="grid grid-cols-2 gap-4 mb-6"><div class="glass-panel p-4 text-center"><div class="text-slate-400 text-xs mb-1 uppercase font-semibold">Total Referrals</div><div class="text-2xl font-bold text-white" id="stat-referrals">0</div></div><div class="glass-panel p-4 text-center border border-emerald-500/30 bg-emerald-900/10"><div class="text-emerald-400 text-xs mb-1 uppercase font-semibold">Referral Earned</div><div class="text-2xl font-bold text-emerald-400" id="ref-earnings">₹0.00</div></div></div>
                 <h3 class="text-xs font-bold text-slate-300 mb-3 px-1 uppercase tracking-wider"><i class="fa-solid fa-list-check mr-2 text-indigo-400"></i> Referral Rewards</h3>
-                <div id="referrals-list" class="space-y-2.5">
-                    <div class="text-center text-slate-500 py-6 text-xs glass-panel">Loading referral activity...</div>
-                </div>
+                <div id="referrals-list" class="space-y-2.5"><div class="text-center text-slate-500 py-6 text-xs glass-panel">Loading referral activity...</div></div>
             </div>
 
             <!-- PAGE: WALLET & WITHDRAWALS -->
             <div id="page-wallet" class="page-content hidden mx-4 mb-6 fade-in">
                 <h2 class="text-lg font-bold mb-4 text-white"><i class="fa-solid fa-wallet text-emerald-400 mr-2"></i> My Wallet</h2>
-                
-                <!-- Balances Breakdown -->
-                <div class="grid grid-cols-2 gap-3 mb-4">
-                    <div class="glass-panel p-4 text-center bg-gradient-to-br from-emerald-900/20 to-transparent border border-emerald-500/30">
-                        <div class="text-[11px] text-emerald-300 mb-1 font-semibold uppercase">Available</div>
-                        <div class="text-2xl font-bold text-white" id="wallet-avail-balance">₹0.00</div>
-                    </div>
-                    <div class="glass-panel p-4 text-center bg-gradient-to-br from-amber-900/20 to-transparent border border-amber-500/30">
-                        <div class="text-[11px] text-amber-300 mb-1 font-semibold uppercase">Reserved</div>
-                        <div class="text-2xl font-bold text-white" id="wallet-reserved-balance">₹0.00</div>
-                    </div>
-                </div>
-
-                <!-- Withdrawal Form (INR Standardized) -->
+                <div class="grid grid-cols-2 gap-3 mb-4"><div class="glass-panel p-4 text-center bg-gradient-to-br from-emerald-900/20 to-transparent border border-emerald-500/30"><div class="text-[11px] text-emerald-300 mb-1 font-semibold uppercase">Available</div><div class="text-2xl font-bold text-white" id="wallet-avail-balance">₹0.00</div></div><div class="glass-panel p-4 text-center bg-gradient-to-br from-amber-900/20 to-transparent border border-amber-500/30"><div class="text-[11px] text-amber-300 mb-1 font-semibold uppercase">Reserved</div><div class="text-2xl font-bold text-white" id="wallet-reserved-balance">₹0.00</div></div></div>
                 <div class="glass-panel p-5 mb-6 border border-slate-700">
-                    <div class="flex justify-between items-center border-b border-slate-700 pb-2 mb-4">
-                        <h3 class="font-bold text-xs text-white uppercase tracking-wider">Request Payout</h3>
-                        <span class="text-[10px] text-slate-400">Min: <strong class="text-white" id="min-withdraw-display">₹100.00</strong></span>
-                    </div>
-                    
-                    <div class="mb-3.5">
-                        <label class="block text-xs font-bold text-slate-400 mb-1.5">Payment Method</label>
-                        <select id="withdraw-method" class="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-3 text-xs focus:outline-none focus:border-indigo-500">
-                            <option value="UPI">UPI (Google Pay, PhonePe, Paytm)</option>
-                            <option value="Binance Pay">Binance Pay ID</option>
-                            <option value="USDT TRC20">USDT (TRC20)</option>
-                            <option value="PayPal">PayPal</option>
-                        </select>
-                    </div>
-
-                    <div class="mb-3.5">
-                        <label class="block text-xs font-bold text-slate-400 mb-1.5">Payment Details (UPI ID / Address)</label>
-                        <input type="text" id="withdraw-details" placeholder="e.g. username@upi or USDT Address" class="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-3 text-xs focus:outline-none focus:border-indigo-500">
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="block text-xs font-bold text-slate-400 mb-1.5">Amount to Withdraw (₹)</label>
-                        <input type="number" step="1" min="100" id="withdraw-amount" placeholder="Min ₹100.00" class="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-3 text-xs focus:outline-none focus:border-indigo-500">
-                    </div>
-
+                    <div class="flex justify-between items-center border-b border-slate-700 pb-2 mb-4"><h3 class="font-bold text-xs text-white uppercase tracking-wider">Request Payout</h3><span class="text-[10px] text-slate-400">Min: <strong class="text-white" id="min-withdraw-display">₹100.00</strong></span></div>
+                    <div class="mb-3.5"><label class="block text-xs font-bold text-slate-400 mb-1.5">Payment Method</label><select id="withdraw-method" class="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-3 text-xs focus:outline-none focus:border-indigo-500"><option value="UPI">UPI (Google Pay, PhonePe, Paytm)</option><option value="Binance Pay">Binance Pay ID</option><option value="USDT TRC20">USDT (TRC20)</option><option value="PayPal">PayPal</option></select></div>
+                    <div class="mb-3.5"><label class="block text-xs font-bold text-slate-400 mb-1.5">Payment Details (UPI ID / Address)</label><input type="text" id="withdraw-details" placeholder="e.g. username@upi or USDT Address" class="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-3 text-xs focus:outline-none focus:border-indigo-500"></div>
+                    <div class="mb-4"><label class="block text-xs font-bold text-slate-400 mb-1.5">Amount to Withdraw (₹)</label><input type="number" step="1" min="100" id="withdraw-amount" placeholder="Min ₹100.00" class="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-3 text-xs focus:outline-none focus:border-indigo-500"></div>
                     <div id="withdraw-error" class="hidden text-red-400 text-xs mb-3 font-semibold"></div>
-
-                    <button id="btn-submit-withdraw" class="w-full success-gradient hover:opacity-90 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center space-x-2 transition-transform active:scale-95 text-xs">
-                        <i class="fa-solid fa-money-bill-transfer mr-1"></i><span>Submit Request</span>
-                    </button>
+                    <button id="btn-submit-withdraw" class="w-full success-gradient hover:opacity-90 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center space-x-2 transition-transform active:scale-95 text-xs"><i class="fa-solid fa-money-bill-transfer mr-1"></i><span>Submit Request</span></button>
                 </div>
-
-                <!-- History -->
                 <h3 class="font-bold text-xs text-slate-300 mb-3 px-1 uppercase tracking-wider"><i class="fa-solid fa-clock-rotate-left mr-2"></i> Payout History</h3>
-                <div id="withdrawal-history-list" class="space-y-2.5">
-                    <div class="glass-panel p-5 text-center text-slate-500 text-xs">No transactions recorded yet.</div>
-                </div>
+                <div id="withdrawal-history-list" class="space-y-2.5"><div class="glass-panel p-5 text-center text-slate-500 text-xs">No transactions recorded yet.</div></div>
             </div>
 
             <!-- PAGE: PROFILE -->
             <div id="page-profile" class="page-content hidden mx-4 mb-6 fade-in">
-                <div class="glass-panel p-6 mb-6 text-center relative overflow-hidden">
-                    <div id="profile-avatar" class="w-20 h-20 rounded-full primary-gradient mx-auto mb-3 flex items-center justify-center text-3xl font-bold text-white shadow-xl border-4 border-slate-800">?</div>
-                    <h2 id="profile-name" class="text-xl font-bold text-white">Creator</h2>
-                    <p id="profile-id" class="text-[11px] text-indigo-300 font-mono mt-1.5 bg-indigo-500/20 inline-block px-3 py-0.5 rounded-full border border-indigo-500/30">ID: ...</p>
-                </div>
-
-                <div class="glass-panel p-2 mb-4 shadow-lg">
-                    <h3 class="text-[10px] font-bold text-slate-400 px-3 pt-3 pb-1 uppercase tracking-wider">Official Channels</h3>
-                    <a id="link-tg" href="https://t.me/myfileshareskbot" target="_blank" class="flex items-center justify-between p-3 hover:bg-slate-800/50 rounded-xl transition">
-                        <div class="flex items-center"><i class="fa-brands fa-telegram w-7 text-blue-400 text-xl text-center"></i><span class="font-medium text-xs text-slate-200 ml-2">Official Bot & Channel</span></div>
-                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-500"></i>
-                    </a>
-                </div>
-
+                <div class="glass-panel p-6 mb-6 text-center relative overflow-hidden"><div id="profile-avatar" class="w-20 h-20 rounded-full primary-gradient mx-auto mb-3 flex items-center justify-center text-3xl font-bold text-white shadow-xl border-4 border-slate-800">?</div><h2 id="profile-name" class="text-xl font-bold text-white">Creator</h2><p id="profile-id" class="text-[11px] text-indigo-300 font-mono mt-1.5 bg-indigo-500/20 inline-block px-3 py-0.5 rounded-full border border-indigo-500/30">ID: ...</p></div>
+                <div class="glass-panel p-2 mb-4 shadow-lg"><h3 class="text-[10px] font-bold text-slate-400 px-3 pt-3 pb-1 uppercase tracking-wider">Official Channels</h3><a id="link-tg" href="https://t.me/myfileshareskbot" target="_blank" class="flex items-center justify-between p-3 hover:bg-slate-800/50 rounded-xl transition"><div class="flex items-center"><i class="fa-brands fa-telegram w-7 text-blue-400 text-xl text-center"></i><span class="font-medium text-xs text-slate-200 ml-2">Official Bot & Channel</span></div><i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-500"></i></a></div>
                 <div class="text-center text-[10px] text-slate-500 mt-6 mb-2">TeleShort v2.1 • Powered by <span class="font-bold text-indigo-400">Advanced Mini App Core</span></div>
             </div>
         </div>
 
-        <!-- BOTTOM NAVIGATION -->
-        <nav class="fixed bottom-0 left-0 w-full bg-[#0f172a]/95 backdrop-blur-xl border-t border-slate-800 z-40 pb-safe">
-            <div class="flex justify-between items-end px-2 pt-2 pb-3">
-                <button class="nav-btn nav-item active flex flex-col items-center w-1/5" data-target="page-home"><div class="nav-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-1"><i class="fa-solid fa-house"></i></div><span class="text-[10px] font-medium tracking-wide">Home</span></button>
-                <button class="nav-btn nav-item flex flex-col items-center w-1/5" data-target="page-links"><div class="nav-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-1"><i class="fa-solid fa-link"></i></div><span class="text-[10px] font-medium tracking-wide">Links</span></button>
-                <button class="nav-btn nav-item flex flex-col items-center w-1/5" data-target="page-refer"><div class="nav-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-1"><i class="fa-solid fa-users"></i></div><span class="text-[10px] font-medium tracking-wide">Refer</span></button>
-                <button class="nav-btn nav-item flex flex-col items-center w-1/5" data-target="page-wallet"><div class="nav-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-1"><i class="fa-solid fa-wallet"></i></div><span class="text-[10px] font-medium tracking-wide">Wallet</span></button>
-                <button class="nav-btn nav-item flex flex-col items-center w-1/5" data-target="page-profile"><div class="nav-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-1"><i class="fa-solid fa-user"></i></div><span class="text-[10px] font-medium tracking-wide">Profile</span></button>
-            </div>
-        </nav>
+        <nav class="fixed bottom-0 left-0 w-full bg-[#0f172a]/95 backdrop-blur-xl border-t border-slate-800 z-40 pb-safe"><div class="flex justify-between items-end px-2 pt-2 pb-3"><button class="nav-btn nav-item active flex flex-col items-center w-1/5" data-target="page-home"><div class="nav-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-1"><i class="fa-solid fa-house"></i></div><span class="text-[10px] font-medium tracking-wide">Home</span></button><button class="nav-btn nav-item flex flex-col items-center w-1/5" data-target="page-links"><div class="nav-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-1"><i class="fa-solid fa-link"></i></div><span class="text-[10px] font-medium tracking-wide">Links</span></button><button class="nav-btn nav-item flex flex-col items-center w-1/5" data-target="page-refer"><div class="nav-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-1"><i class="fa-solid fa-users"></i></div><span class="text-[10px] font-medium tracking-wide">Refer</span></button><button class="nav-btn nav-item flex flex-col items-center w-1/5" data-target="page-wallet"><div class="nav-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-1"><i class="fa-solid fa-wallet"></i></div><span class="text-[10px] font-medium tracking-wide">Wallet</span></button><button class="nav-btn nav-item flex flex-col items-center w-1/5" data-target="page-profile"><div class="nav-icon w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-1"><i class="fa-solid fa-user"></i></div><span class="text-[10px] font-medium tracking-wide">Profile</span></button></div></nav>
     </div>
 
     <!-- LOAD PRODUCTION APP ENGINE -->
     <script src="/app.js"></script>
+    <script src="/force-join-fix.js"></script>
 </body>
 </html>
