@@ -8,13 +8,13 @@ const { getSupabaseClient } = require('../utils/db');
 const DEFAULT_FORCE_JOIN_CHANNELS = [
   {
     channel_id: '-1002471479638',
-    username: '@kannadanewmovie_sk',
-    url: 'https://t.me/kannadanewmovie_sk'
+    username: '',
+    url: 'https://t.me/+IbHLv5W4jpBkYzBl'
   },
   {
     channel_id: '-1001565776206',
-    username: '',
-    url: ''
+    username: '@kannadanewmovie_sk',
+    url: 'https://t.me/kannadanewmovie_sk'
   }
 ];
 
