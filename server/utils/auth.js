@@ -50,12 +50,14 @@ function verifyTelegramWebAppData(initDataString, botToken, maxAgeSeconds = 8640
     const hash = urlParams.get('hash');
     if (!hash && !urlParams.get('signature')) return { valid: false, user: null, error: 'Missing Telegram authentication signature' };
 
-    const authDate = parseInt(urlParams.get('auth_date'), 10);
-    if (authDate) {
-      const nowSeconds = Math.floor(Date.now() / 1000);
-      if (authDate > nowSeconds + 60) return { valid: false, user: null, error: 'initData auth_date is from the future' };
-      if (nowSeconds - authDate > maxAgeSeconds) return { valid: false, user: null, error: 'initData has expired' };
+    const authDateRaw = urlParams.get('auth_date');
+    const authDate = Number(authDateRaw);
+    if (!authDateRaw || !Number.isSafeInteger(authDate) || authDate <= 0) {
+      return { valid: false, user: null, error: 'Telegram auth_date is missing or invalid' };
     }
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (authDate > nowSeconds + 60) return { valid: false, user: null, error: 'initData auth_date is from the future' };
+    if (nowSeconds - authDate > maxAgeSeconds) return { valid: false, user: null, error: 'initData has expired' };
 
     let hmacValid = false;
     const cleanBotToken = typeof botToken === 'string' ? botToken.trim() : '';
